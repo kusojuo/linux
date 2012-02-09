@@ -106,6 +106,7 @@
 
 #define EDMA_MAX_DMACH           64
 #define EDMA_MAX_PARAMENTRY     512
+#define EDMA_MAX_REGION		  4
 
 /*****************************************************************************/
 
@@ -143,6 +144,11 @@ static inline void edma_or(unsigned ctlr, int offset, unsigned or)
 static inline unsigned int edma_read_array(unsigned ctlr, int offset, int i)
 {
 	return edma_read(ctlr, offset + (i << 2));
+}
+static inline unsigned int edma_read_array2(unsigned ctlr, int offset, int i,
+		int j)
+{
+	return edma_read(ctlr, offset + ((i*2 + j) << 2));
 }
 static inline void edma_write_array(unsigned ctlr, int offset, int i,
 		unsigned val)
@@ -258,6 +264,22 @@ struct edma {
 				void *data);
 		void *data;
 	} intr_data[EDMA_MAX_DMACH];
+
+	/* suspend/resume backup parameters */
+	struct edmacc_param *bkp_prm_set;
+	unsigned int *bkp_ch_map;		/* 64 registers */
+	unsigned int *bkp_que_num;		/* 8 registers */
+	unsigned int *bkp_drae;
+	unsigned int *bkp_draeh;
+	unsigned int *bkp_qrae;
+	unsigned int bkp_sh_esr;
+	unsigned int bkp_sh_esrh;
+	unsigned int bkp_sh_eesr;
+	unsigned int bkp_sh_eesrh;
+	unsigned int bkp_sh_iesr;
+	unsigned int bkp_sh_iesrh;
+	unsigned int bkp_que_tc_map;
+	unsigned int bkp_que_pri;
 };
 
 static struct edma *edma_cc[EDMA_MAX_CC];
@@ -1661,6 +1683,43 @@ static int edma_probe(struct platform_device *pdev)
 							EDMA_MAX_PARAMENTRY);
 		edma_cc[j]->num_cc = min_t(unsigned, info[j]->n_cc,
 							EDMA_MAX_CC);
+		edma_cc[j]->num_region = min_t(unsigned, info[j]->n_region,
+							EDMA_MAX_REGION);
+
+		edma_cc[j]->bkp_prm_set = devm_kzalloc(&pdev->dev, (sizeof(struct edmacc_param) *
+						edma_cc[j]->num_slots),
+						GFP_KERNEL);
+		if (!edma_cc[j]->bkp_prm_set)
+			return -ENOMEM;
+
+		edma_cc[j]->bkp_ch_map = devm_kzalloc(&pdev->dev, (sizeof(unsigned int) *
+						edma_cc[j]->num_channels),
+						GFP_KERNEL);
+		if (!edma_cc[j]->bkp_ch_map)
+			return -ENOMEM;
+
+		edma_cc[j]->bkp_que_num = devm_kzalloc(&pdev->dev, (sizeof(unsigned int) * 8),
+								GFP_KERNEL);
+		if (!edma_cc[j]->bkp_que_num)
+			return -ENOMEM;
+
+		edma_cc[j]->bkp_drae = devm_kzalloc(&pdev->dev, (sizeof(unsigned int) *
+							edma_cc[j]->num_region),
+							GFP_KERNEL);
+		if (!edma_cc[j]->bkp_drae)
+			return -ENOMEM;
+
+		edma_cc[j]->bkp_draeh = devm_kzalloc(&pdev->dev, (sizeof(unsigned int) *
+							edma_cc[j]->num_region),
+							GFP_KERNEL);
+		if (!edma_cc[j]->bkp_draeh)
+			return -ENOMEM;
+
+		edma_cc[j]->bkp_qrae = devm_kzalloc(&pdev->dev, (sizeof(unsigned int) *
+							edma_cc[j]->num_region),
+							GFP_KERNEL);
+		if (!edma_cc[j]->bkp_qrae)
+			return -ENOMEM;
 
 		edma_cc[j]->default_queue = info[j]->default_queue;
 
@@ -1778,12 +1837,142 @@ static int edma_probe(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM
+static int edma3_suspend(struct platform_device *pdev, pm_message_t state)
+{
+	int i, j;
+
+	for (i = 0; i < arch_num_cc; i++) {
+		/* backup channel data */
+		for (j = 0; j < edma_cc[i]->num_channels; j++) {
+			edma_cc[i]->bkp_ch_map[j] = edma_read_array(i,
+							EDMA_DCHMAP, j);
+		}
+
+		/* backup DMA Queue Number */
+		for (j = 0; j < 8; j++) {
+			edma_cc[i]->bkp_que_num[j] = edma_read_array(i,
+							EDMA_DMAQNUM, j);
+		}
+
+		for (j = 0; j < edma_cc[i]->num_region; j++) {
+			/* backup DMA DMA Region Access Enable data */
+			edma_cc[i]->bkp_drae[j] = edma_read_array2(i,
+							EDMA_DRAE, j, 0);
+			edma_cc[i]->bkp_draeh[j] = edma_read_array2(i,
+							EDMA_DRAE, j, 1);
+
+			/* backup DMA QDMA Region Access Enable data */
+			edma_cc[i]->bkp_qrae[j] = edma_read_array(i,
+							EDMA_QRAE, j);
+		}
+
+		/* backup DMA shadow Event Set data */
+		edma_cc[i]->bkp_sh_esr = edma_shadow0_read_array(i, SH_ESR, 0);
+		edma_cc[i]->bkp_sh_esrh = edma_shadow0_read_array(i, SH_ESR, 1);
+
+		/* backup DMA Shadow Event Enable Set data */
+		edma_cc[i]->bkp_sh_eesr = edma_shadow0_read_array(i,
+							SH_EER, 0);
+		edma_cc[i]->bkp_sh_eesrh = edma_shadow0_read_array(i,
+							SH_EER, 1);
+
+		/* backup DMA Shadow Interrupt Enable Set data */
+		edma_cc[i]->bkp_sh_iesr = edma_shadow0_read_array(i,
+							SH_IER, 0);
+		edma_cc[i]->bkp_sh_iesrh = edma_shadow0_read_array(i,
+							SH_IER, 1);
+
+		edma_cc[i]->bkp_que_tc_map = edma_read(i, EDMA_QUETCMAP);
+
+		/* backup DMA Queue Priority data */
+		edma_cc[i]->bkp_que_pri = edma_read(i, EDMA_QUEPRI);
+
+		/* backup paramset */
+		for (j = 0; j < edma_cc[i]->num_slots; j++) {
+			memcpy_fromio(&edma_cc[i]->bkp_prm_set[j],
+				edmacc_regs_base[i] + PARM_OFFSET(j),
+				PARM_SIZE);
+		}
+	}
+
+	return 0;
+}
+
+static int edma3_resume(struct platform_device *pdev)
+{
+	int i, j;
+
+	for (i = 0; i < arch_num_cc; i++) {
+
+		/* restore channel data */
+		for (j = 0; j < edma_cc[i]->num_channels; j++) {
+			edma_write_array(i, EDMA_DCHMAP, j,
+						edma_cc[i]->bkp_ch_map[j]);
+		}
+
+		/* restore DMA Queue Number */
+		for (j = 0; j < 8; j++) {
+			edma_write_array(i, EDMA_DMAQNUM, j,
+						edma_cc[i]->bkp_que_num[j]);
+		}
+
+		for (j = 0; j < edma_cc[i]->num_region; j++) {
+			/* restore DMA DMA Region Access Enable data */
+			edma_write_array2(i, EDMA_DRAE, j, 0,
+						edma_cc[i]->bkp_drae[j]);
+			edma_write_array2(i, EDMA_DRAE, j, 1,
+						edma_cc[i]->bkp_draeh[j]);
+
+			/* restore DMA QDMA Region Access Enable data */
+			edma_write_array(i, EDMA_QRAE, j,
+						edma_cc[i]->bkp_qrae[j]);
+		}
+
+		/* restore DMA shadow Event Set data */
+		edma_shadow0_write_array(i, SH_ESR, 0, edma_cc[i]->bkp_sh_esr);
+		edma_shadow0_write_array(i, SH_ESR, 1, edma_cc[i]->bkp_sh_esrh);
+
+		/* restore DMA Shadow Event Enable Set data */
+		edma_shadow0_write_array(i, SH_EESR, 0,
+						edma_cc[i]->bkp_sh_eesr);
+		edma_shadow0_write_array(i, SH_EESR, 1,
+						edma_cc[i]->bkp_sh_eesrh);
+
+		/* restore DMA Shadow Interrupt Enable Set data */
+		edma_shadow0_write_array(i, SH_IESR, 0,
+						edma_cc[i]->bkp_sh_iesr);
+		edma_shadow0_write_array(i, SH_IESR, 1,
+						edma_cc[i]->bkp_sh_iesrh);
+
+		edma_write(i, EDMA_QUETCMAP, edma_cc[i]->bkp_que_tc_map);
+
+		/* restore DMA Queue Priority data */
+		edma_write(i, EDMA_QUEPRI, edma_cc[i]->bkp_que_pri);
+
+		/* restore paramset */
+		for (j = 0; j < edma_cc[i]->num_slots; j++) {
+			memcpy_toio(edmacc_regs_base[i] + PARM_OFFSET(j),
+				&edma_cc[i]->bkp_prm_set[j], PARM_SIZE);
+		}
+	}
+
+	return 0;
+}
+
+#else
+#define edma3_suspend	NULL
+#define edma3_resume	NULL
+#endif
+
 static const struct of_device_id edma_of_ids[] = {
 	{ .compatible = "ti,edma3", },
 	{}
 };
 
 static struct platform_driver edma_driver = {
+	.suspend	= edma3_suspend,
+	.resume		= edma3_resume,
 	.driver = {
 		.name	= "edma",
 		.of_match_table = edma_of_ids,
