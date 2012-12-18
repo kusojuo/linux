@@ -137,6 +137,7 @@ static int __devinit ti_tscadc_probe(struct platform_device *pdev)
 	/* TSCADC_CLKDIV needs to be configured to the value minus 1 */
 	clk_value = clk_value - 1;
 	tscadc_writel(tscadc, TSCADC_REG_CLKDIV, clk_value);
+	tscadc->clkdiv = clk_value;
 
 	/* Set the control register bits */
 	ctrl = TSCADC_CNTRLREG_STEPCONFIGWRT |
@@ -229,6 +230,7 @@ static int tscadc_resume(struct platform_device *pdev)
 			TSCADC_CNTRLREG_STEPID |
 			TSCADC_CNTRLREG_4WIRE;
 	tscadc_writel(tscadc_dev, TSCADC_REG_CTRL, ctrl);
+	tscadc_writel(tscadc_dev, TSCADC_REG_CLKDIV, tscadc_dev->clkdiv);
 	tscadc_idle_config(tscadc_dev);
 	tscadc_writel(tscadc_dev, TSCADC_REG_SE, TSCADC_STPENB_STEPENB);
 	restore = tscadc_readl(tscadc_dev, TSCADC_REG_CTRL);
