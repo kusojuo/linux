@@ -240,6 +240,25 @@ void omap2_dflt_clk_disable(struct clk *clk)
 	/* No OCP barrier needed here since it is a disable operation */
 }
 
+void omap2_dflt_clk_save_context(struct clk *clk)
+{
+	if (clk->clksel_reg)
+		omap3_clksel_save_context(clk);
+}
+
+void omap2_dflt_clk_restore_context(struct clk *clk)
+{
+	if (clk->clksel_reg)
+		omap3_clksel_restore_context(clk);
+
+	if (clk->enable_reg) {
+		if (clk->usecount)
+			clk->ops->enable(clk);
+		else
+			clk->ops->disable(clk);
+	}
+}
+
 const struct clkops clkops_omap2_dflt_wait = {
 	.enable		= omap2_dflt_clk_enable,
 	.disable	= omap2_dflt_clk_disable,
@@ -250,6 +269,8 @@ const struct clkops clkops_omap2_dflt_wait = {
 const struct clkops clkops_omap2_dflt = {
 	.enable		= omap2_dflt_clk_enable,
 	.disable	= omap2_dflt_clk_disable,
+	.save_context	= omap2_dflt_clk_save_context,
+	.restore_context = omap2_dflt_clk_restore_context,
 };
 
 /**
@@ -407,11 +428,20 @@ const struct clkops clkops_omap3_noncore_dpll_ops = {
 	.disable	= omap3_noncore_dpll_disable,
 	.allow_idle	= omap3_dpll_allow_idle,
 	.deny_idle	= omap3_dpll_deny_idle,
+	.save_context	= omap3_noncore_dpll_save_context,
+	.restore_context = omap3_noncore_dpll_restore_context,
 };
 
 const struct clkops clkops_omap3_core_dpll_ops = {
 	.allow_idle	= omap3_dpll_allow_idle,
 	.deny_idle	= omap3_dpll_deny_idle,
+	.save_context	= omap3_core_dpll_save_context,
+	.restore_context = omap3_core_dpll_restore_context,
+};
+
+const struct clkops clkops_omap3_clksel_ops = {
+	.save_context	= omap3_clksel_save_context,
+	.restore_context = omap3_clksel_restore_context,
 };
 
 #endif

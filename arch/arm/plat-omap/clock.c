@@ -253,6 +253,58 @@ void recalculate_root_clocks(void)
 	}
 }
 
+static void clock_save_context(struct clk *clk)
+{
+	struct clk *clkp;
+
+	list_for_each_entry(clkp, &clk->children, sibling)
+		clock_save_context(clkp);
+
+	if (clk->ops && clk->ops->save_context)
+		clk->ops->save_context(clk);
+}
+
+static void clock_restore_context(struct clk *clk)
+{
+	struct clk *clkp;
+
+	if (clk->ops && clk->ops->restore_context)
+		clk->ops->restore_context(clk);
+
+	list_for_each_entry(clkp, &clk->children, sibling)
+		clock_restore_context(clkp);
+
+}
+
+/**
+ * clocks_save_context - save clock context for poweroff
+ *
+ * Saves the context of the clock register for powerstates in which the
+ * contents of the registers will be lost. Occurs deep within the suspend
+ * code so locking is not necessary.
+ */
+void clocks_save_context(void)
+{
+	struct clk *clkp;
+
+	list_for_each_entry(clkp, &root_clks, sibling)
+		clock_save_context(clkp);
+}
+
+/**
+ * clocks_restore_context - restore clock context after poweroff
+ *
+ * This occurs with all clocks enabled. Occurs deep within the resume code
+ * so locking is not necessary.
+ */
+void clocks_restore_context(void)
+{
+	struct clk *clkp;
+
+	list_for_each_entry(clkp, &root_clks, sibling)
+		clock_restore_context(clkp);
+}
+
 /**
  * clk_preinit - initialize any fields in the struct clk before clk init
  * @clk: struct clk * to initialize

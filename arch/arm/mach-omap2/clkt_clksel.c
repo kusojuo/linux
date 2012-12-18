@@ -507,3 +507,17 @@ int omap2_clksel_set_parent(struct clk *clk, struct clk *new_parent)
 
 	return 0;
 }
+
+void omap3_clksel_save_context(struct clk *clk)
+{
+	u32 v;
+	v = readl(clk->clksel_reg);
+	v &= clk->clksel_mask;
+	clk->context = v >> __ffs(clk->clksel_mask);
+}
+
+void omap3_clksel_restore_context(struct clk *clk)
+{
+	_write_clksel_reg(clk, clk->context);
+
+}

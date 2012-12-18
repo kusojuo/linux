@@ -159,5 +159,18 @@ extern const struct clkops clkops_omap2xxx_dpll_ops;
 extern const struct clkops clkops_omap3_noncore_dpll_ops;
 extern const struct clkops clkops_omap3_core_dpll_ops;
 extern const struct clkops clkops_omap4_dpllmx_ops;
+extern const struct clkops clkops_omap3_clksel_ops;
+
+extern void omap2_dflt_clk_save_context(struct clk *clk);
+extern void omap2_dflt_clk_restore_context(struct clk *clk);
+
+extern void omap3_clksel_save_context(struct clk *clk);
+extern void omap3_clksel_restore_context(struct clk *clk);
+
+extern void omap3_noncore_dpll_save_context(struct clk *clk);
+extern void omap3_noncore_dpll_restore_context(struct clk *clk);
+
+extern void omap3_core_dpll_save_context(struct clk *clk);
+extern void omap3_core_dpll_restore_context(struct clk *clk);
 
 #endif

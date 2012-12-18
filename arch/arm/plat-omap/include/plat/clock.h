@@ -40,6 +40,8 @@ struct clockdomain;
 struct clkops {
 	int			(*enable)(struct clk *);
 	void			(*disable)(struct clk *);
+	void			(*save_context)(struct clk *);
+	void			(*restore_context)(struct clk *);
 	void			(*find_idlest)(struct clk *, void __iomem **,
 					       u8 *, u8 *);
 	void			(*find_companion)(struct clk *, void __iomem **,
@@ -169,6 +171,7 @@ struct dpll_data {
 	u8			recal_st_bit;
 #  endif
 	u8			flags;
+	u32			scratch;
 };
 
 #endif
@@ -270,6 +273,7 @@ struct clk {
 #if defined(CONFIG_PM_DEBUG) && defined(CONFIG_DEBUG_FS)
 	struct dentry		*dent;	/* For visible tree hierarchy */
 #endif
+	u32			context;
 };
 
 struct cpufreq_frequency_table;
@@ -312,5 +316,8 @@ extern int omap_clk_disable_autoidle_all(void);
 extern const struct clkops clkops_null;
 
 extern struct clk dummy_ck;
+
+extern void clocks_save_context(void);
+extern void clocks_restore_context(void);
 
 #endif

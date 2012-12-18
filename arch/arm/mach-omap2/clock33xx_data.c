@@ -204,7 +204,7 @@ static struct clk dpll_core_m4_ck = {
 	.clksel		= dpll_core_m4_div,
 	.clksel_reg	= AM33XX_CM_DIV_M4_DPLL_CORE,
 	.clksel_mask	= AM33XX_HSDIVIDER_CLKOUT1_DIV_MASK,
-	.ops		= &clkops_null,
+	.ops		= &clkops_omap3_clksel_ops,
 	.recalc		= &omap2_clksel_recalc,
 	.round_rate	= &omap2_clksel_round_rate,
 	.set_rate	= &omap2_clksel_set_rate,
@@ -221,7 +221,7 @@ static struct clk dpll_core_m5_ck = {
 	.clksel		= dpll_core_m5_div,
 	.clksel_reg	= AM33XX_CM_DIV_M5_DPLL_CORE,
 	.clksel_mask	= AM33XX_HSDIVIDER_CLKOUT2_DIV_MASK,
-	.ops		= &clkops_null,
+	.ops		= &clkops_omap3_clksel_ops,
 	.recalc		= &omap2_clksel_recalc,
 	.round_rate	= &omap2_clksel_round_rate,
 	.set_rate	= &omap2_clksel_set_rate,
@@ -238,7 +238,7 @@ static struct clk dpll_core_m6_ck = {
 	.clksel		= dpll_core_m6_div,
 	.clksel_reg	= AM33XX_CM_DIV_M6_DPLL_CORE,
 	.clksel_mask	= AM33XX_HSDIVIDER_CLKOUT3_DIV_MASK,
-	.ops		= &clkops_null,
+	.ops		= &clkops_omap3_clksel_ops,
 	.recalc		= &omap2_clksel_recalc,
 	.round_rate	= &omap2_clksel_round_rate,
 	.set_rate	= &omap2_clksel_set_rate,
@@ -309,7 +309,7 @@ static struct clk dpll_mpu_m2_ck = {
 	.clksel		= dpll_mpu_m2_div,
 	.clksel_reg	= AM33XX_CM_DIV_M2_DPLL_MPU,
 	.clksel_mask	= AM33XX_DPLL_CLKOUT_DIV_MASK,
-	.ops		= &clkops_null,
+	.ops		= &clkops_omap3_clksel_ops,
 	.recalc		= &omap2_clksel_recalc,
 	.round_rate	= &omap2_clksel_round_rate,
 	.set_rate	= &omap2_clksel_set_rate,
@@ -362,6 +362,10 @@ static const struct clksel dpll_ddr_m2_div[] = {
 	{ .parent = NULL },
 };
 
+/*
+ * u-boot programs this one. Set ops to null so we don't try to restort
+ * it while running from RAM.
+ */
 static struct clk dpll_ddr_m2_ck = {
 	.name		= "dpll_ddr_m2_ck",
 	.parent		= &dpll_ddr_ck,
@@ -416,7 +420,7 @@ static struct clk dpll_disp_ck = {
 	.parent		= &sys_clkin_ck,
 	.dpll_data	= &dpll_disp_dd,
 	.init		= &omap2_init_dpll_parent,
-	.ops		= &clkops_null,
+	.ops		= &clkops_omap3_noncore_dpll_ops,
 	.recalc		= &omap3_dpll_recalc,
 	.round_rate	= &omap2_dpll_round_rate,
 	.set_rate	= &omap3_noncore_dpll_set_rate,
@@ -437,7 +441,7 @@ static struct clk dpll_disp_m2_ck = {
 	.clksel		= dpll_disp_m2_div,
 	.clksel_reg	= AM33XX_CM_DIV_M2_DPLL_DISP,
 	.clksel_mask	= AM33XX_DPLL_CLKOUT_DIV_MASK,
-	.ops		= &clkops_null,
+	.ops		= &clkops_omap3_clksel_ops,
 	.recalc		= &omap2_clksel_recalc,
 	.round_rate	= &omap2_clksel_round_rate,
 	.set_rate	= &omap2_clksel_set_rate,
@@ -474,7 +478,7 @@ static struct clk dpll_per_ck = {
 	.parent		= &sys_clkin_ck,
 	.dpll_data	= &dpll_per_dd,
 	.init		= &omap2_init_dpll_parent,
-	.ops		= &clkops_null,
+	.ops		= &clkops_omap3_noncore_dpll_ops,
 	.recalc		= &omap3_dpll_recalc,
 	.round_rate	= &omap2_dpll_round_rate,
 	.set_rate	= &omap3_noncore_dpll_set_rate,
@@ -492,7 +496,7 @@ static struct clk dpll_per_m2_ck = {
 	.clksel		= dpll_per_m2_div,
 	.clksel_reg	= AM33XX_CM_DIV_M2_DPLL_PER,
 	.clksel_mask	= AM33XX_DPLL_CLKOUT_DIV_MASK,
-	.ops		= &clkops_null,
+	.ops		= &clkops_omap3_clksel_ops,
 	.recalc		= &omap2_clksel_recalc,
 	.round_rate	= &omap2_clksel_round_rate,
 	.set_rate	= &omap2_clksel_set_rate,
@@ -531,8 +535,6 @@ static struct clk l4_wkup_aon_gclk = {
 	.name		= "l4_wkup_aon_gclk",
 	.clkdm_name	= "l4_wkup_aon_clkdm",
 	.parent		= &sysclk1_ck,
-	.enable_reg	= AM33XX_CM_L4_WKUP_AON_CLKSTCTRL,
-	.enable_bit	= AM33XX_MODULEMODE_SWCTRL,
 	.ops		= &clkops_null,
 	.fixed_div	= 2,
 	.recalc		= &followparent_recalc,
@@ -1617,7 +1619,7 @@ static struct clk gpio0_dbclk_mux_ck = {
 	.clksel		= gpio0_dbclk_mux_sel,
 	.clksel_reg	= AM33XX_CLKSEL_GPIO0_DBCLK,
 	.clksel_mask	= AM33XX_CLKSEL_0_1_MASK,
-	.ops		= &clkops_null,
+	.ops		= &clkops_omap3_clksel_ops,
 	.recalc		= &omap2_clksel_recalc,
 };
 
@@ -1714,7 +1716,7 @@ static struct clk pruss_ocp_gclk = {
 	.clksel		= pruss_ocp_clk_mux_sel,
 	.clksel_reg	= AM33XX_CLKSEL_PRUSS_OCP_CLK,
 	.clksel_mask	= AM33XX_CLKSEL_0_0_MASK,
-	.ops		= &clkops_null,
+	.ops		= &clkops_omap3_clksel_ops,
 	.recalc		= &followparent_recalc,
 };
 
@@ -1758,7 +1760,7 @@ static struct clk lcd_gclk = {
 	.clksel		= lcd_clk_mux_sel,
 	.clksel_reg	= AM33XX_CLKSEL_LCDC_PIXEL_CLK,
 	.clksel_mask	= AM33XX_CLKSEL_0_1_MASK,
-	.ops		= &clkops_null,
+	.ops		= &clkops_omap3_clksel_ops,
 	.recalc		= &followparent_recalc,
 };
 
@@ -1841,7 +1843,7 @@ static struct clk gfx_fclk_clksel_ck = {
 	.name		= "gfx_fclk_clksel_ck",
 	.parent		= &sysclk1_ck,
 	.clksel		= gfx_clksel_sel,
-	.ops		= &clkops_null,
+	.ops		= &clkops_omap3_clksel_ops,
 	.clksel_reg	= AM33XX_CLKSEL_GFX_FCLK,
 	.clksel_mask	= AM33XX_CLKSEL_GFX_FCLK_MASK,
 	.recalc		= &omap2_clksel_recalc,
@@ -1897,7 +1899,7 @@ static struct clk sysclkout_pre_ck = {
 	.clksel		= sysclkout_pre_sel,
 	.clksel_reg	= AM33XX_CM_CLKOUT_CTRL,
 	.clksel_mask	= AM33XX_CLKOUT2SOURCE_MASK,
-	.ops		= &clkops_null,
+	.ops		= &clkops_omap3_clksel_ops,
 	.recalc		= &omap2_clksel_recalc,
 };
 
