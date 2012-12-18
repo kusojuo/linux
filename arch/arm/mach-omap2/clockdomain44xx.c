@@ -15,6 +15,8 @@
 #include <linux/kernel.h>
 #include "clockdomain.h"
 #include "cminst44xx.h"
+#include "cm-regbits-34xx.h"
+#include "cm-regbits-44xx.h"
 #include "cm44xx.h"
 
 static int omap4_clkdm_add_wkup_sleep_dep(struct clockdomain *clkdm1,
@@ -112,6 +114,37 @@ static int omap4_clkdm_clk_disable(struct clockdomain *clkdm)
 	return 0;
 }
 
+static int am33xx_clkdm_save_context(struct clockdomain *clkdm)
+{
+	clkdm->save = omap4_cminst_read_inst_reg_bits(clkdm->prcm_partition,
+			clkdm->cm_inst, clkdm->clkdm_offs + OMAP4_CM_CLKSTCTRL,
+			OMAP4430_CLKTRCTRL_MASK);
+	return 0;
+}
+
+static int am33xx_clkdm_restore_context(struct clockdomain *clkdm)
+{
+	switch (clkdm->save) {
+	case OMAP34XX_CLKSTCTRL_DISABLE_AUTO:
+		omap4_cminst_clkdm_disable_hwsup(clkdm->prcm_partition,
+					clkdm->cm_inst, clkdm->clkdm_offs);
+		break;
+	case OMAP34XX_CLKSTCTRL_FORCE_SLEEP:
+		omap4_cminst_clkdm_force_sleep(clkdm->prcm_partition,
+					clkdm->cm_inst, clkdm->clkdm_offs);
+		break;
+	case OMAP34XX_CLKSTCTRL_FORCE_WAKEUP:
+		omap4_cminst_clkdm_force_wakeup(clkdm->prcm_partition,
+					clkdm->cm_inst, clkdm->clkdm_offs);
+		break;
+	case OMAP34XX_CLKSTCTRL_ENABLE_AUTO:
+		omap4_cminst_clkdm_enable_hwsup(clkdm->prcm_partition,
+					clkdm->cm_inst, clkdm->clkdm_offs);
+		break;
+	}
+	return 0;
+}
+
 struct clkdm_ops omap4_clkdm_operations = {
 	.clkdm_add_wkdep	= omap4_clkdm_add_wkup_sleep_dep,
 	.clkdm_del_wkdep	= omap4_clkdm_del_wkup_sleep_dep,
@@ -134,4 +167,6 @@ struct clkdm_ops am33xx_clkdm_operations = {
 	.clkdm_wakeup		= omap4_clkdm_wakeup,
 	.clkdm_clk_enable	= omap4_clkdm_clk_enable,
 	.clkdm_clk_disable	= omap4_clkdm_clk_disable,
+	.clkdm_save_context	= am33xx_clkdm_save_context,
+	.clkdm_restore_context	= am33xx_clkdm_restore_context,
 };
