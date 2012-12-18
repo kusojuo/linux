@@ -56,10 +56,12 @@ void (*am33xx_do_wfi_sram)(u32 *);
 static void __iomem *ipc_regs;
 static void __iomem *m3_eoi;
 static void __iomem *m3_code;
+static struct omap_hwmod *wkup_m3_oh;
 static u32 suspend_cfg_param_list[SUSPEND_CFG_PARAMS_END];
 
 static struct device *mpu_dev;
 static struct omap_mbox *m3_mbox;
+static const struct firmware *m3_firmware;
 static struct powerdomain *gfx_pwrdm, *per_pwrdm;
 static struct clockdomain *gfx_l3_clkdm, *gfx_l4ls_clkdm;
 static struct omap_mux_partition *per_partition;
@@ -76,6 +78,34 @@ static DECLARE_COMPLETION(a8_m3_sync);
 static u32 gmii_sel;
 
 static bool enable_deep_sleep;
+
+static void wkup_m3_reinitialize(void)
+{
+#ifdef CONFIG_SUSPEND
+	int ret;
+
+	m3_state = M3_STATE_UNKNOWN;
+
+	if (!m3_code || !m3_firmware || !wkup_m3_oh)
+		return;
+
+	ret = omap_hwmod_assert_hardreset(wkup_m3_oh, "wkup_m3");
+	if (ret < 0)
+		goto err;
+
+	memcpy(m3_code, m3_firmware->data, m3_firmware->size);
+	m3_state = M3_STATE_RESET;
+
+	ret = omap_hwmod_deassert_hardreset(wkup_m3_oh, "wkup_m3");
+	if (ret < 0)
+		goto err;
+
+	return;
+
+err:
+	pr_err("Could not restore M3 context\n");
+#endif
+}
 
 static int am33xx_per_save_context(void)
 {
@@ -399,8 +429,6 @@ static irqreturn_t wkup_m3_txev_handler(int irq, void *unused)
 static int wkup_m3_init(void)
 {
 	struct clk *m3_clk;
-	struct omap_hwmod *wkup_m3_oh;
-	const struct firmware *firmware;
 	int ret = 0;
 	int ipc_reg_r = 0;
 
@@ -455,14 +483,14 @@ static int wkup_m3_init(void)
 
 	pr_info("Trying to load am335x-pm-firmware.bin (60 secs timeout)\n");
 
-	ret = request_firmware(&firmware, "am335x-pm-firmware.bin", mpu_dev);
+	ret = request_firmware(&m3_firmware, "am335x-pm-firmware.bin", mpu_dev);
 	if (ret < 0) {
 		dev_err(mpu_dev, "request_firmware failed\n");
 		goto err6;
-	} else {
-		memcpy(m3_code, firmware->data, firmware->size);
-		pr_info("Copied the M3 firmware to UMEM\n");
 	}
+
+	memcpy(m3_code, m3_firmware->data, m3_firmware->size);
+	pr_info("Copied the M3 firmware to UMEM\n");
 
 	ret = request_irq(AM33XX_IRQ_M3_M3SP_TXEV, wkup_m3_txev_handler,
 			  IRQF_DISABLED, "wkup_m3_txev", NULL);
@@ -493,8 +521,10 @@ static int wkup_m3_init(void)
 	}
 
 err6:
-	release_firmware(firmware);
+	release_firmware(m3_firmware);
+	m3_firmware = NULL;
 	iounmap(m3_code);
+	m3_code = NULL;
 err5:
 	clk_disable(m3_clk);
 err4:
@@ -506,6 +536,7 @@ err2:
 err1:
 	iounmap(ipc_regs);
 exit:
+	wkup_m3_oh = NULL;
 	return ret;
 }
 
