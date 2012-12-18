@@ -128,13 +128,15 @@ static void __soft_restart(void *addr)
 	BUG();
 }
 
-void soft_restart(unsigned long addr)
+void soft_restart(unsigned long addr, bool disable_irq)
 {
 	u64 *stack = soft_restart_stack + ARRAY_SIZE(soft_restart_stack);
 
-	/* Disable interrupts first */
-	local_irq_disable();
-	local_fiq_disable();
+	if (disable_irq) {
+		/* Disable interrupts first */
+		local_irq_disable();
+		local_fiq_disable();
+	}
 
 	/* Disable the L2 if we're the last man standing. */
 	if (num_online_cpus() == 1)

@@ -101,7 +101,7 @@ extern int __pure cpu_architecture(void);
 extern void cpu_init(void);
 
 void arm_machine_restart(char mode, const char *cmd);
-void soft_restart(unsigned long);
+void soft_restart(unsigned long addr, bool disable_irq);
 extern void (*arm_pm_restart)(char str, const char *cmd);
 
 #define UDBG_UNDEFINED	(1 << 0)
