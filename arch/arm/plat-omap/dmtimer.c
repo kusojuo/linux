@@ -315,6 +315,7 @@ EXPORT_SYMBOL_GPL(omap_dm_timer_trigger);
 
 int omap_dm_timer_start(struct omap_dm_timer *timer)
 {
+	u32 ctx_loss_cnt_after;
 	u32 l;
 
 	if (unlikely(!timer))
@@ -322,12 +323,9 @@ int omap_dm_timer_start(struct omap_dm_timer *timer)
 
 	omap_dm_timer_enable(timer);
 
-	if (timer->loses_context) {
-		u32 ctx_loss_cnt_after =
-			timer->get_context_loss_count(&timer->pdev->dev);
-		if (ctx_loss_cnt_after != timer->ctx_loss_count)
-			omap_timer_restore_context(timer);
-	}
+	ctx_loss_cnt_after = timer->get_context_loss_count(&timer->pdev->dev);
+	if (ctx_loss_cnt_after != timer->ctx_loss_count)
+		omap_timer_restore_context(timer);
 
 	l = omap_dm_timer_read_reg(timer, OMAP_TIMER_CTRL_REG);
 	if (!(l & OMAP_TIMER_CTRL_ST)) {
@@ -407,6 +405,7 @@ EXPORT_SYMBOL_GPL(omap_dm_timer_set_load);
 int omap_dm_timer_set_load_start(struct omap_dm_timer *timer, int autoreload,
                             unsigned int load)
 {
+	u32 ctx_loss_cnt_after;
 	u32 l;
 
 	if (unlikely(!timer))
@@ -414,12 +413,9 @@ int omap_dm_timer_set_load_start(struct omap_dm_timer *timer, int autoreload,
 
 	omap_dm_timer_enable(timer);
 
-	if (timer->loses_context) {
-		u32 ctx_loss_cnt_after =
-			timer->get_context_loss_count(&timer->pdev->dev);
-		if (ctx_loss_cnt_after != timer->ctx_loss_count)
-			omap_timer_restore_context(timer);
-	}
+	ctx_loss_cnt_after = timer->get_context_loss_count(&timer->pdev->dev);
+	if (ctx_loss_cnt_after != timer->ctx_loss_count)
+		omap_timer_restore_context(timer);
 
 	l = omap_dm_timer_read_reg(timer, OMAP_TIMER_CTRL_REG);
 	if (autoreload) {
@@ -693,7 +689,6 @@ static int __devinit omap_dm_timer_probe(struct platform_device *pdev)
 	timer->irq = irq->start;
 	timer->reserved = pdata->reserved;
 	timer->pdev = pdev;
-	timer->loses_context = pdata->loses_context;
 	timer->get_context_loss_count = pdata->get_context_loss_count;
 
 	/* Skip pm_runtime_enable for OMAP1 */

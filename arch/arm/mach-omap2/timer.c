@@ -581,7 +581,6 @@ static int __init omap_timer_init(struct omap_hwmod *oh, void *unused)
 		pdata->reserved = 1;
 
 	pwrdm = omap_hwmod_get_pwrdm(oh);
-	pdata->loses_context = pwrdm_can_ever_lose_context(pwrdm);
 #ifdef CONFIG_PM
 	pdata->get_context_loss_count = omap_pm_get_dev_context_loss_count;
 #endif

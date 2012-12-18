@@ -225,7 +225,6 @@ int pwrdm_pre_transition(void);
 int pwrdm_post_transition(void);
 int pwrdm_set_lowpwrstchange(struct powerdomain *pwrdm);
 int pwrdm_get_context_loss_count(struct powerdomain *pwrdm);
-bool pwrdm_can_ever_lose_context(struct powerdomain *pwrdm);
 
 extern void omap242x_powerdomains_init(void);
 extern void omap243x_powerdomains_init(void);

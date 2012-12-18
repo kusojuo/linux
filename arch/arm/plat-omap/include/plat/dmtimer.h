@@ -103,8 +103,6 @@ struct dmtimer_platform_data {
 	u32 needs_manual_reset:1;
 	bool reserved;
 
-	bool loses_context;
-
 	int (*get_context_loss_count)(struct device *dev);
 };
 
@@ -276,7 +274,6 @@ struct omap_dm_timer {
 	unsigned reserved:1;
 	unsigned posted:1;
 	struct timer_regs context;
-	bool loses_context;
 	int ctx_loss_count;
 	int revision;
 	struct platform_device *pdev;
