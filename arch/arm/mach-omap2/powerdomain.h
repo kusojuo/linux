@@ -129,6 +129,7 @@ struct powerdomain {
 	s64 timer;
 	s64 state_timer[PWRDM_MAX_PWRSTS];
 #endif
+	u32 pwrstctrl_save;
 };
 
 /**
@@ -171,6 +172,8 @@ struct pwrdm_ops {
 	int	(*pwrdm_disable_hdwr_sar)(struct powerdomain *pwrdm);
 	int	(*pwrdm_set_lowpwrstchange)(struct powerdomain *pwrdm);
 	int	(*pwrdm_wait_transition)(struct powerdomain *pwrdm);
+	void	(*pwrdm_save_context)(struct powerdomain *pwrdm);
+	void	(*pwrdm_restore_context)(struct powerdomain *pwrdm);
 };
 
 int pwrdm_register_platform_funcs(struct pwrdm_ops *custom_funcs);
@@ -243,5 +246,9 @@ extern u32 omap2_pwrdm_get_mem_bank_stst_mask(u8 bank);
 extern struct powerdomain wkup_omap2_pwrdm;
 extern struct powerdomain gfx_omap2_pwrdm;
 
+extern void pwrdms_save_context(void);
+extern void pwrdms_restore_context(void);
+
+extern void pwrdms_lost_power(void);
 
 #endif
