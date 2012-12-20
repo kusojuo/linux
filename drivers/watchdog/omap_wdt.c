@@ -378,24 +378,24 @@ static int __devexit omap_wdt_remove(struct platform_device *pdev)
  * may not play well enough with NOWAYOUT...
  */
 
-static int omap_wdt_suspend(struct platform_device *pdev, pm_message_t state)
+static int omap_wdt_suspend(struct device *dev)
 {
-	struct omap_wdt_dev *wdev = platform_get_drvdata(pdev);
+	struct omap_wdt_dev *wdev = dev_get_drvdata(dev);
 
 	if (wdev->omap_wdt_users) {
 		omap_wdt_disable(wdev);
-		pm_runtime_put_sync(wdev->dev);
+		pm_runtime_put_sync(dev);
 	}
 
 	return 0;
 }
 
-static int omap_wdt_resume(struct platform_device *pdev)
+static int omap_wdt_resume(struct device *dev)
 {
-	struct omap_wdt_dev *wdev = platform_get_drvdata(pdev);
+	struct omap_wdt_dev *wdev = dev_get_drvdata(dev);
 
 	if (wdev->omap_wdt_users) {
-		pm_runtime_get_sync(wdev->dev);
+		pm_runtime_get_sync(dev);
 		omap_wdt_enable(wdev);
 		omap_wdt_ping(wdev);
 	}
@@ -403,20 +403,43 @@ static int omap_wdt_resume(struct platform_device *pdev)
 	return 0;
 }
 
+static int omap_wdt_restore(struct device *dev)
+{
+	struct omap_wdt_dev *wdev = dev_get_drvdata(dev);
+
+	omap_wdt_resume(dev);
+
+	/*
+	 * We don't know what the resume kernel last pinged the WDT with. If
+	 * it pinged it with the same value we ping it with, the ping will be
+	 * ignored. Double ping to be sure we reset the timer.
+	 */
+	if (wdev->omap_wdt_users)
+		omap_wdt_ping(wdev);
+
+	return 0;
+}
+
 #else
 #define	omap_wdt_suspend	NULL
 #define	omap_wdt_resume		NULL
+#define	omap_wdt_restore	NULL
 #endif
+
+static const struct dev_pm_ops omap_wdt_pm_ops = {
+	.suspend	= omap_wdt_suspend,
+	.resume		= omap_wdt_resume,
+	.restore	= omap_wdt_restore,
+};
 
 static struct platform_driver omap_wdt_driver = {
 	.probe		= omap_wdt_probe,
 	.remove		= __devexit_p(omap_wdt_remove),
 	.shutdown	= omap_wdt_shutdown,
-	.suspend	= omap_wdt_suspend,
-	.resume		= omap_wdt_resume,
 	.driver		= {
 		.owner	= THIS_MODULE,
 		.name	= "omap_wdt",
+		.pm	= &omap_wdt_pm_ops,
 	},
 };
 
