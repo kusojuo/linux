@@ -31,7 +31,8 @@
 #include <video/omap-panel-nokia-dsi.h>
 #include <video/omap-panel-picodlp.h>
 
-#include "soc.h"
+#include <plat/cpu.h>
+
 #include "dss-common.h"
 #include "mux.h"
 

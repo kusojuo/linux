@@ -32,4 +32,8 @@
 #include <mach/soc.h>
 #endif
 
+#ifdef CONFIG_ARCH_OMAP2PLUS
+#include "../../mach-omap2/soc.h"
+#endif
+
 #endif
