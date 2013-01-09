@@ -1492,13 +1492,16 @@ void omap2_gpio_resume_after_idle(void)
 #endif
 
 #ifdef CONFIG_ARCH_OMAP3
-/* save the registers of bank 2-6 */
 void omap_gpio_save_context(void)
 {
 	int i;
+	int min = 0;
 
 	/* saving banks from 2-6 only since GPIO1 is in WKUP */
-	for (i = 1; i < gpio_bank_count; i++) {
+	if (cpu_is_omap3430())
+		min = 1;
+
+	for (i = min; i < gpio_bank_count; i++) {
 		struct gpio_bank *bank = &gpio_bank[i];
 		gpio_context[i].irqenable1 =
 			__raw_readl(bank->base + bank->regs->irqenable);
@@ -1527,12 +1530,15 @@ void omap_gpio_save_context(void)
 	}
 }
 
-/* restore the required registers of bank 2-6 */
 void omap_gpio_restore_context(void)
 {
 	int i;
+	int min = 0;
 
-	for (i = 1; i < gpio_bank_count; i++) {
+	if (cpu_is_omap3430())
+		min = 1;
+
+	for (i = min; i < gpio_bank_count; i++) {
 		struct gpio_bank *bank = &gpio_bank[i];
 		__raw_writel(gpio_context[i].irqenable1,
 				bank->base + bank->regs->irqenable);
