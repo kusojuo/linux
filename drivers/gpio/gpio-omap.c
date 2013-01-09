@@ -73,6 +73,8 @@ struct omap3_gpio_regs {
 	u32 risingdetect;
 	u32 fallingdetect;
 	u32 dataout;
+	u32 debounce;
+	u32 debounce_en;
 };
 
 static struct omap3_gpio_regs gpio_context[OMAP34XX_NR_GPIOS];
@@ -1518,6 +1520,10 @@ void omap_gpio_save_context(void)
 			__raw_readl(bank->base + bank->regs->fallingdetect);
 		gpio_context[i].dataout =
 			__raw_readl(bank->base + bank->regs->dataout);
+		gpio_context[i].debounce =
+			__raw_readl(bank->base + bank->regs->debounce);
+		gpio_context[i].debounce_en =
+			__raw_readl(bank->base + bank->regs->debounce_en);
 	}
 }
 
@@ -1548,6 +1554,10 @@ void omap_gpio_restore_context(void)
 				bank->base + bank->regs->fallingdetect);
 		__raw_writel(gpio_context[i].dataout,
 				bank->base + bank->regs->dataout);
+		__raw_writel(gpio_context[i].debounce,
+				bank->base + bank->regs->debounce);
+		__raw_writel(gpio_context[i].debounce_en,
+				bank->base + bank->regs->debounce_en);
 	}
 }
 #endif
