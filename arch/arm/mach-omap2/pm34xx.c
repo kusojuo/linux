@@ -341,6 +341,7 @@ void omap_sram_idle(void)
 		if (core_next_state == PWRDM_POWER_OFF) {
 			omap3_core_save_context();
 			omap3_cm_save_context();
+			omap_sram_save_context();
 		}
 	}
 
@@ -383,7 +384,7 @@ void omap_sram_idle(void)
 		if (core_prev_state == PWRDM_POWER_OFF) {
 			omap3_core_restore_context();
 			omap3_cm_restore_context();
-			omap3_sram_restore_context();
+			omap_sram_restore_context();
 			omap2_sms_restore_context();
 		}
 		if (core_next_state == PWRDM_POWER_OFF)

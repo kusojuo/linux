@@ -69,6 +69,7 @@
 static unsigned long omap_sram_start;
 static void __iomem *omap_sram_base;
 static unsigned long omap_sram_size;
+static char *omap_sram_backup;
 
 /*
  * Depending on the target RAMFS firewall setup, the public usable amount of
@@ -336,29 +337,38 @@ u32 omap3_configure_core_dpll(u32 m2, u32 unlock_dll, u32 f, u32 inc,
 			sdrc_actim_ctrl_b_1, sdrc_mr_1);
 }
 
+#endif /* CONFIG_ARCH_OMAP3 */
+
 #ifdef CONFIG_PM
-void omap3_sram_restore_context(void)
+void omap_sram_save_context(void)
 {
-	_omap3_sram_configure_core_dpll =
-		omap_sram_push(omap3_sram_configure_core_dpll,
-			       omap3_sram_configure_core_dpll_sz);
-	omap_push_sram_idle();
+	if (omap_sram_backup)
+		memcpy(omap_sram_backup, omap_sram_base, omap_sram_size);
+}
+
+void omap_sram_restore_context(void)
+{
+	if (omap_sram_backup)
+		memcpy(omap_sram_base, omap_sram_backup, omap_sram_size);
 }
 #endif /* CONFIG_PM */
-
-#endif /* CONFIG_ARCH_OMAP3 */
 
 static inline int omap34xx_sram_init(void)
 {
 #if defined(CONFIG_ARCH_OMAP3) && defined(CONFIG_PM)
-	omap3_sram_restore_context();
+	_omap3_sram_configure_core_dpll =
+		omap_sram_push(omap3_sram_configure_core_dpll,
+			omap3_sram_configure_core_dpll_sz);
+	omap_push_sram_idle();
 #endif
 	return 0;
 }
 
 static inline int am33xx_sram_init(void)
 {
+#if defined(CONFIG_SOC_OMAPAM33XX) && defined(CONFIG_PM)
 	am33xx_push_sram_idle();
+#endif
 	return 0;
 }
 
@@ -366,6 +376,10 @@ int __init omap_sram_init(void)
 {
 	omap_detect_sram();
 	omap_map_sram();
+
+#ifdef CONFIG_PM
+	omap_sram_backup = kmalloc(omap_sram_size, GFP_KERNEL);
+#endif
 
 	if (!(cpu_class_is_omap2()))
 		omap1_sram_init();
