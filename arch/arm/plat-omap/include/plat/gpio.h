@@ -192,6 +192,14 @@ struct omap_gpio_reg_offs {
 	u16 debounce;
 	u16 debounce_en;
 
+	u16 irqenable2;
+	u16 wake_en;
+	u16 ctrl;
+	u16 leveldetect;
+	u16 leveldetect2;
+	u16 risingdetect;
+	u16 fallingdetect;
+
 	bool irqenable_inv;
 };
 
