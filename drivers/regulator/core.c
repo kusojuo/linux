@@ -659,11 +659,8 @@ static int suspend_set_state(struct regulator_dev *rdev,
 	 * only warn if the driver actually makes the suspend mode
 	 * configurable.
 	 */
-	if (!rstate->enabled && !rstate->disabled) {
-		if (can_set_state)
-			rdev_warn(rdev, "No configuration\n");
+	if (!rstate->enabled && !rstate->disabled)
 		return 0;
-	}
 
 	if (rstate->enabled && rstate->disabled) {
 		rdev_err(rdev, "invalid configuration\n");
