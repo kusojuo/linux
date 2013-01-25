@@ -365,10 +365,30 @@ static void __init omap2_gp_clocksource_init(int gptimer_id,
 }
 #endif
 
+static cycle_t clksrc_suspend_cyc;
+
 static void omap_dmtimer_resume(void)
 {
 	char name[10];
 	struct omap_hwmod *oh;
+	u32 ctx_loss_cnt_after;
+
+	sprintf(name, "timer%d", clksrc.id);
+	oh = omap_hwmod_lookup(name);
+	if (!oh)
+		return;
+
+	ctx_loss_cnt_after = omap_hwmod_get_context_loss_count(oh);
+	if (ctx_loss_cnt_after != clksrc.ctx_loss_count) {
+		if (clksrc.fclk->ops && clksrc.fclk->ops->enable)
+			clksrc.fclk->ops->enable(clksrc.fclk);
+		_is_timer_idle(oh);
+		__omap_dm_timer_reset(&clksrc, 1, 1);
+		__omap_dm_timer_load_start(&clksrc,
+				OMAP_TIMER_CTRL_ST | OMAP_TIMER_CTRL_AR,
+				clksrc_suspend_cyc, 1);
+		__omap_dm_timer_int_enable(&clksrc, OMAP_TIMER_INT_OVERFLOW);
+	}
 
 	sprintf(name, "timer%d", clkev.id);
 	oh = omap_hwmod_lookup(name);
@@ -385,6 +405,14 @@ static void omap_dmtimer_suspend(void)
 {
 	char name[10];
 	struct omap_hwmod *oh;
+
+	sprintf(name, "timer%d", clksrc.id);
+	oh = omap_hwmod_lookup(name);
+	if (!oh)
+		return;
+
+	clksrc_suspend_cyc = (cycle_t)__omap_dm_timer_read_counter(&clksrc, 1);
+	clksrc.ctx_loss_count = omap_hwmod_get_context_loss_count(oh);
 
 	sprintf(name, "timer%d", clkev.id);
 	oh = omap_hwmod_lookup(name);
