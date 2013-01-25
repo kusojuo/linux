@@ -140,6 +140,7 @@ struct omap_mux_partition {
 	u32			size;
 	void __iomem		*base;
 	struct list_head	muxmodes;
+	struct list_head	unused_muxmodes;
 	struct list_head	node;
 };
 

@@ -1292,6 +1292,7 @@ static struct omap_mux * __init omap_mux_list_add(
 {
 	struct omap_mux_entry *entry;
 	struct omap_mux *m;
+	struct list_head *muxlist = &partition->muxmodes;
 
 	entry = kzalloc(sizeof(struct omap_mux_entry), GFP_KERNEL);
 	if (!entry)
@@ -1305,10 +1306,18 @@ static struct omap_mux * __init omap_mux_list_add(
 		kfree(entry);
 		return NULL;
 	}
+
+	if (!src->muxnames || !src->muxnames[0])
+		muxlist = &partition->unused_muxmodes;
+#else
+	/* Skip pins that are not muxed as GPIO by bootloader */
+	if (!OMAP_MODE_GPIO(omap_mux_read(partition, src->reg_offset)))
+		muxlist = &partition->unused_muxmodes;
 #endif
 
+
 	mutex_lock(&muxmode_mutex);
-	list_add_tail(&entry->node, &partition->muxmodes);
+	list_add_tail(&entry->node, muxlist);
 	mutex_unlock(&muxmode_mutex);
 
 	return m;
@@ -1322,22 +1331,8 @@ static struct omap_mux * __init omap_mux_list_add(
 static void __init omap_mux_init_list(struct omap_mux_partition *partition,
 				      struct omap_mux *superset)
 {
-	while (superset->reg_offset !=  OMAP_MUX_TERMINATOR) {
+	while (superset->reg_offset != OMAP_MUX_TERMINATOR) {
 		struct omap_mux *entry;
-
-#ifdef CONFIG_OMAP_MUX
-		if (!superset->muxnames || !superset->muxnames[0]) {
-			superset++;
-			continue;
-		}
-#else
-		/* Skip pins that are not muxed as GPIO by bootloader */
-		if (!OMAP_MODE_GPIO(omap_mux_read(partition,
-				    superset->reg_offset))) {
-			superset++;
-			continue;
-		}
-#endif
 
 		entry = omap_mux_list_add(partition, superset);
 		if (!entry) {
@@ -1410,6 +1405,7 @@ int __init omap_mux_init(const char *name, u32 flags,
 	}
 
 	INIT_LIST_HEAD(&partition->muxmodes);
+	INIT_LIST_HEAD(&partition->unused_muxmodes);
 
 	list_add_tail(&partition->node, &mux_partitions);
 	mux_partitions_cnt++;
