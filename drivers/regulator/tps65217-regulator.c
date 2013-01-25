@@ -36,7 +36,8 @@
 		.owner		= THIS_MODULE,		\
 	}						\
 
-#define TPS65217_INFO(_nm, _min, _max, _f1, _f2, _t, _n, _em, _vr, _vm)	\
+#define TPS65217_INFO(_nm, _min, _max, _f1, _f2, _t, _n, _em, _vr, _vm, _sr, \
+		      _sm) \
 	{						\
 		.name		= _nm,			\
 		.min_uV		= _min,			\
@@ -48,6 +49,9 @@
 		.enable_mask	= _em,			\
 		.set_vout_reg	= _vr,			\
 		.set_vout_mask	= _vm,			\
+		.seq_reg	= _sr,			\
+		.seq_mask	= _sm,			\
+		.strobe		= 0,			\
 	}
 
 static const int LDO1_VSEL_table[] = {
@@ -128,27 +132,34 @@ static int tps65217_uv_to_vsel2(int uV, unsigned int *vsel)
 static struct tps_info tps65217_pmic_regs[] = {
 	TPS65217_INFO("DCDC1", 900000, 1800000, tps65217_vsel_to_uv1,
 			tps65217_uv_to_vsel1, NULL, 64, TPS65217_ENABLE_DC1_EN,
-			TPS65217_REG_DEFDCDC1, TPS65217_DEFDCDCX_DCDC_MASK),
+			TPS65217_REG_DEFDCDC1, TPS65217_DEFDCDCX_DCDC_MASK,
+			TPS65217_REG_SEQ1, TPS65217_SEQ1_DC1_SEQ_MASK),
 	TPS65217_INFO("DCDC2", 900000, 3300000, tps65217_vsel_to_uv1,
 			tps65217_uv_to_vsel1, NULL, 64, TPS65217_ENABLE_DC2_EN,
-			TPS65217_REG_DEFDCDC2, TPS65217_DEFDCDCX_DCDC_MASK),
+			TPS65217_REG_DEFDCDC2, TPS65217_DEFDCDCX_DCDC_MASK,
+			TPS65217_REG_SEQ1, TPS65217_SEQ1_DC2_SEQ_MASK),
 	TPS65217_INFO("DCDC3", 900000, 1500000, tps65217_vsel_to_uv1,
 			tps65217_uv_to_vsel1, NULL, 64, TPS65217_ENABLE_DC3_EN,
-			TPS65217_REG_DEFDCDC3, TPS65217_DEFDCDCX_DCDC_MASK),
+			TPS65217_REG_DEFDCDC3, TPS65217_DEFDCDCX_DCDC_MASK,
+			TPS65217_REG_SEQ2, TPS65217_SEQ2_DC3_SEQ_MASK),
 	TPS65217_INFO("LDO1", 1000000, 3300000, NULL, NULL, LDO1_VSEL_table,
 			16, TPS65217_ENABLE_LDO1_EN, TPS65217_REG_DEFLDO1,
-			TPS65217_DEFLDO1_LDO1_MASK),
+			TPS65217_DEFLDO1_LDO1_MASK,
+			TPS65217_REG_SEQ2, TPS65217_SEQ2_LDO1_SEQ_MASK),
 	TPS65217_INFO("LDO2", 900000, 3300000, tps65217_vsel_to_uv1,
 			tps65217_uv_to_vsel1, NULL, 64, TPS65217_ENABLE_LDO2_EN,
-			TPS65217_REG_DEFLDO2, TPS65217_DEFLDO2_LDO2_MASK),
+			TPS65217_REG_DEFLDO2, TPS65217_DEFLDO2_LDO2_MASK,
+			TPS65217_REG_SEQ3, TPS65217_SEQ3_LDO2_SEQ_MASK),
 	TPS65217_INFO("LDO3", 1800000, 3300000, tps65217_vsel_to_uv2,
 			tps65217_uv_to_vsel2, NULL, 32,
 			TPS65217_ENABLE_LS1_EN | TPS65217_DEFLDO3_LDO3_EN,
-			TPS65217_REG_DEFLS1, TPS65217_DEFLDO3_LDO3_MASK),
+			TPS65217_REG_DEFLS1, TPS65217_DEFLDO3_LDO3_MASK,
+			TPS65217_REG_SEQ3, TPS65217_SEQ3_LDO3_SEQ_MASK),
 	TPS65217_INFO("LDO4", 1800000, 3300000, tps65217_vsel_to_uv2,
 			tps65217_uv_to_vsel2, NULL, 32,
 			TPS65217_ENABLE_LS2_EN | TPS65217_DEFLDO4_LDO4_EN,
-			TPS65217_REG_DEFLS2, TPS65217_DEFLDO4_LDO4_MASK),
+			TPS65217_REG_DEFLS2, TPS65217_DEFLDO4_LDO4_MASK,
+			TPS65217_REG_SEQ4, TPS65217_SEQ4_LDO4_SEQ_MASK),
 };
 
 static int tps65217_pmic_dcdc_is_enabled(struct regulator_dev *dev)
@@ -237,6 +248,62 @@ static int tps65217_pmic_ldo_disable(struct regulator_dev *dev)
 	/* Disable the regulator and password protection is level 1 */
 	return tps65217_clear_bits(tps, TPS65217_REG_ENABLE,
 			tps->info[ldo]->enable_mask, TPS65217_PROTECT_L1);
+}
+
+static int tps65217_pmic_dcdc_set_suspend_disable(struct regulator_dev *dev)
+{
+	struct tps65217 *tps = rdev_get_drvdata(dev);
+	unsigned int dcdc = rdev_get_id(dev);
+
+	if (dcdc < TPS65217_DCDC_1 || dcdc > TPS65217_DCDC_3)
+		return -EINVAL;
+
+	if (!tps->info[dcdc]->strobe)
+		return -EINVAL;
+
+	return tps65217_set_bits(tps, tps->info[dcdc]->seq_reg,
+			tps->info[dcdc]->seq_mask, tps->info[dcdc]->strobe,
+			TPS65217_PROTECT_L1);
+}
+
+static int tps65217_pmic_dcdc_set_suspend_enable(struct regulator_dev *dev)
+{
+	struct tps65217 *tps = rdev_get_drvdata(dev);
+	unsigned int dcdc = rdev_get_id(dev);
+
+	if (dcdc < TPS65217_DCDC_1 || dcdc > TPS65217_DCDC_3)
+		return -EINVAL;
+
+	return tps65217_clear_bits(tps, tps->info[dcdc]->seq_reg,
+			tps->info[dcdc]->seq_mask, TPS65217_PROTECT_L1);
+}
+
+static int tps65217_pmic_ldo_set_suspend_disable(struct regulator_dev *dev)
+{
+	struct tps65217 *tps = rdev_get_drvdata(dev);
+	unsigned int ldo = rdev_get_id(dev);
+
+	if (ldo < TPS65217_LDO_1 || ldo > TPS65217_LDO_4)
+		return -EINVAL;
+
+	if (!tps->info[ldo]->strobe)
+		return -EINVAL;
+
+	return tps65217_set_bits(tps, tps->info[ldo]->seq_reg,
+			tps->info[ldo]->seq_mask, tps->info[ldo]->strobe,
+			TPS65217_PROTECT_L1);
+}
+
+static int tps65217_pmic_ldo_set_suspend_enable(struct regulator_dev *dev)
+{
+	struct tps65217 *tps = rdev_get_drvdata(dev);
+	unsigned int ldo = rdev_get_id(dev);
+
+	if (ldo < TPS65217_LDO_1 || ldo > TPS65217_LDO_4)
+		return -EINVAL;
+
+	return tps65217_clear_bits(tps, tps->info[ldo]->seq_reg,
+			tps->info[ldo]->seq_mask, TPS65217_PROTECT_L1);
 }
 
 static int tps65217_pmic_dcdc_get_voltage_sel(struct regulator_dev *dev)
@@ -413,6 +480,8 @@ static struct regulator_ops tps65217_pmic_dcdc_ops = {
 	.set_voltage		= tps65217_pmic_dcdc_set_voltage,
 	.list_voltage		= tps65217_pmic_dcdc_list_voltage,
 	.set_voltage_time_sel	= tps65217_pmic_dcdc_set_voltage_time_sel,
+	.set_suspend_enable	= tps65217_pmic_dcdc_set_suspend_enable,
+	.set_suspend_disable	= tps65217_pmic_dcdc_set_suspend_disable,
 };
 
 /* Operations permitted on LDO1 */
@@ -423,6 +492,8 @@ static struct regulator_ops tps65217_pmic_ldo1_ops = {
 	.get_voltage_sel	= tps65217_pmic_ldo_get_voltage_sel,
 	.set_voltage_sel	= tps65217_pmic_ldo_set_voltage_sel,
 	.list_voltage		= tps65217_pmic_ldo_list_voltage,
+	.set_suspend_enable	= tps65217_pmic_ldo_set_suspend_enable,
+	.set_suspend_disable	= tps65217_pmic_ldo_set_suspend_disable,
 };
 
 /* Operations permitted on LDO2, LDO3 and LDO4 */
@@ -433,6 +504,8 @@ static struct regulator_ops tps65217_pmic_ldo234_ops = {
 	.get_voltage_sel	= tps65217_pmic_ldo_get_voltage_sel,
 	.set_voltage		= tps65217_pmic_ldo_set_voltage,
 	.list_voltage		= tps65217_pmic_ldo_list_voltage,
+	.set_suspend_enable	= tps65217_pmic_ldo_set_suspend_enable,
+	.set_suspend_disable	= tps65217_pmic_ldo_set_suspend_disable,
 };
 
 static struct regulator_desc regulators[] = {
@@ -459,10 +532,17 @@ static int __devinit tps65217_regulator_probe(struct platform_device *pdev)
 	struct tps_info *info = &tps65217_pmic_regs[pdev->id];
 	const struct regulator_init_data *init_data = pdev->dev.platform_data;
 	struct tps65217_rdelay *pd = init_data->driver_data;
+	unsigned int val;
+	int ret;
 
 	/* Already set by core driver */
 	tps = dev_to_tps65217(pdev->dev.parent);
 	tps->info[pdev->id] = info;
+
+	ret = tps65217_reg_read(tps, info->seq_reg, &val);
+	if (ret)
+		return ret;
+	info->strobe = val & info->seq_mask;
 
 	if (pd)
 		tps->info[pdev->id]->delay = pd->ramp_delay;

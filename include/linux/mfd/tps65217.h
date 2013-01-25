@@ -248,6 +248,9 @@ struct tps65217_rdelay {
  * @enable_mask:	Regulator enable mask bits
  * @set_vout_reg:	Regulator output voltage set register
  * @set_vout_mask:	Regulator output voltage set mask
+ * @strobe:		Stobe to use if disabled during sleep
+ * @seq_reg:		Sequencer register
+ * @seq_mask:		Sequencer register mask
  *
  * This data is used to check the regualtor voltage limits while setting.
  */
@@ -263,6 +266,9 @@ struct tps_info {
 	unsigned int enable_mask;
 	unsigned int set_vout_reg;
 	unsigned int set_vout_mask;
+	int strobe;
+	unsigned int seq_reg;
+	unsigned int seq_mask;
 };
 
 struct power_supply;
