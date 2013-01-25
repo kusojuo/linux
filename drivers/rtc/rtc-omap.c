@@ -79,6 +79,7 @@
 #define OMAP_RTC_ALARM2_MONTHS_REG	0x90
 #define OMAP_RTC_ALARM2_YEARS_REG	0x94
 #define OMAP_RTC_PMIC_REG		0x98
+#define OMAP_RTC_DEBOUNCE_REG		0x9c
 
 #define OMAP_RTC_IRQWAKEEN		0x7C
 
@@ -109,6 +110,10 @@
 
 /* OMAP_RTC_PMIC_REG bit fields: */
 #define OMAP_RTC_PMIC_POWER_EN_EN	(1<<16)
+#define OMAP_RTC_PMIC_EXT_WAKEUP_STATUS	(1<<12)
+#define OMAP_RTC_PMIC_EXT_WAKEUP_DB_EN	(1<<8)
+#define OMAP_RTC_PMIC_EXT_WAKEUP_POL	(1<<4)
+#define OMAP_RTC_PMIC_EXT_WAKEUP_EN	(1<<0)
 
 #define SHUTDOWN_TIME_SEC		2
 #define SECS_IN_MIN			60
@@ -517,6 +522,22 @@ static int __init omap_rtc_probe(struct platform_device *pdev)
 
 	if (pdata->wakeup_capable)
 		device_init_wakeup(&pdev->dev, 1);
+
+	if (pdata->ext_wakeup_enable) {
+		reg = readl(rtc_base + OMAP_RTC_PMIC_REG);
+		reg |= OMAP_RTC_PMIC_EXT_WAKEUP_EN;
+		if (pdata->ext_wakeup_invert)
+			reg |= OMAP_RTC_PMIC_EXT_WAKEUP_POL;
+		else
+			reg &= ~OMAP_RTC_PMIC_EXT_WAKEUP_POL;
+		if (pdata->ext_wakeup_debounce_en) {
+			reg |= OMAP_RTC_PMIC_EXT_WAKEUP_DB_EN;
+			rtc_write(pdata->ext_wakeup_debounce_taps,
+						OMAP_RTC_DEBOUNCE_REG);
+		} else
+			reg &= ~OMAP_RTC_PMIC_EXT_WAKEUP_DB_EN;
+		writel(reg, rtc_base + OMAP_RTC_PMIC_REG);
+	}
 
 	return 0;
 
