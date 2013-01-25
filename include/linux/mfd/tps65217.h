@@ -21,6 +21,7 @@
 #include <linux/i2c.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
+#include <linux/notifier.h>
 
 /* I2C ID for TPS65217 part */
 #define TPS65217_I2C_ID			0x24
@@ -285,6 +286,10 @@ struct tps65217 {
 	struct platform_device *regulator_pdev[TPS65217_NUM_REGULATOR];
 	struct platform_device *power_supply_pdev;
 	struct platform_device *pwrbutton_pdev;
+
+	int write_status_off;
+	int status_off_written;
+	struct notifier_block reboot_notifier;
 
 	int irq_base;
 	struct mutex irq_lock;
