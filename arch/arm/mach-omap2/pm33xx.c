@@ -64,7 +64,7 @@ static struct omap_mbox *m3_mbox;
 static const struct firmware *m3_firmware;
 static struct powerdomain *gfx_pwrdm, *per_pwrdm;
 static struct clockdomain *gfx_l3_clkdm, *gfx_l4ls_clkdm;
-static struct omap_mux_partition *per_partition;
+static struct omap_mux_partition *wkup_partition, *per_partition;
 
 static int m3_state = M3_STATE_UNKNOWN;
 static int m3_version = M3_VERSION_UNKNOWN;
@@ -128,6 +128,35 @@ static void am33xx_per_restore_context(void)
 	writel(gmii_sel, AM33XX_CTRL_REGADDR(AM33XX_CONTROL_GMII_SEL_OFFSET));
 
 	omap_mux_restore_context(per_partition);
+}
+
+static int am33xx_wkup_save_context(void)
+{
+	omap_mux_save_context(wkup_partition);
+
+	omap_intc_save_context();
+	am33xx_control_save_context();
+
+	clocks_save_context();
+	pwrdms_save_context();
+	omap_hwmods_save_context();
+	clkdm_save_context();
+	omap_sram_save_context();
+
+	return 0;
+}
+
+static void am33xx_wkup_restore_context(void)
+{
+	clocks_restore_context();
+	pwrdms_restore_context();
+	clkdm_restore_context();
+	omap_hwmods_restore_context();
+	am33xx_control_restore_context();
+	omap_mux_restore_context(wkup_partition);
+	omap_intc_restore_context();
+	wkup_m3_reinitialize();
+	omap_sram_restore_context();
 }
 
 static int am33xx_do_sram_idle(long unsigned int state)
@@ -656,6 +685,10 @@ static int __init am33xx_pm_init(void)
 	per_partition = omap_mux_get("per");
 	if (!per_partition)
 		pr_err("Failed to get per mux partition");
+
+	wkup_partition = omap_mux_get("wkup");
+	if (!wkup_partition)
+		pr_err("Failed to get wkup mux partition");
 
 	ret = am33xx_setup_deep_sleep();
 	if (ret < 0)
