@@ -25,8 +25,11 @@
 #include <linux/suspend.h>
 #include <linux/completion.h>
 #include <linux/pm_runtime.h>
+#include <linux/regulator/consumer.h>
+#include <linux/regulator/machine.h>
 #include <linux/uaccess.h>
 #include <linux/debugfs.h>
+#include <linux/rtc.h>
 
 #include <mach/board-am335xevm.h>
 #include <plat/prcm.h>
@@ -35,6 +38,7 @@
 #include <plat/omap_hwmod.h>
 #include <plat/omap_device.h>
 #include <plat/emif.h>
+#include <plat/gpio.h>
 
 #include <asm/suspend.h>
 #include <asm/proc-fns.h>
@@ -47,6 +51,13 @@
 #include "control.h"
 #include "clockdomain.h"
 #include "powerdomain.h"
+
+static void __iomem *omap_rtc_base;
+
+void __iomem *am33xx_get_rtc_base(void)
+{
+	return omap_rtc_base;
+}
 
 #ifdef CONFIG_SUSPEND
 extern void am33xx_resume_vector(void);
@@ -63,6 +74,8 @@ static struct omap_mbox *m3_mbox;
 static const struct firmware *m3_firmware;
 static struct powerdomain *gfx_pwrdm, *per_pwrdm;
 static struct clockdomain *gfx_l3_clkdm, *gfx_l4ls_clkdm;
+static struct rtc_device *omap_rtc;
+static struct omap_hwmod *rtc_oh;
 static struct omap_mux_partition *wkup_partition, *per_partition;
 
 static int m3_state = M3_STATE_UNKNOWN;
@@ -74,11 +87,13 @@ static void am33xx_m3_state_machine_reset(void);
 
 static DECLARE_COMPLETION(a8_m3_sync);
 
+static int rtc_magic_val;
 static int am33xx_sleep_mode = AM33XX_SLEEP_END;
 
 static u32 gmii_sel;
 
 static bool enable_deep_sleep;
+static bool enable_rtc_only;
 
 static void wkup_m3_reinitialize(void)
 {
@@ -166,6 +181,7 @@ extern struct dentry *pm_debug_dentry;
 static const char *am33xx_sleep_modes[AM33XX_SLEEP_END] = {
 	[AM33XX_SLEEP_DEEPSLEEP1]	= "DeepSleep1",
 	[AM33XX_SLEEP_DEEPSLEEP0]	= "DeepSleep0",
+	[AM33XX_SLEEP_RTC_ONLY]		= "RTC-Only",
 };
 
 static int print_sleep_mode(char *buf, int mode, int curr)
@@ -199,6 +215,8 @@ static ssize_t pm_sleep_mode_read(struct file *file,
 		s += print_sleep_mode(s, AM33XX_SLEEP_DEEPSLEEP1, curr);
 		s += print_sleep_mode(s, AM33XX_SLEEP_DEEPSLEEP0, curr);
 	}
+	if (enable_rtc_only)
+		s += print_sleep_mode(s, AM33XX_SLEEP_RTC_ONLY, curr);
 
 	/* Convert the last space to a newline */
 	if (s != buf)
@@ -245,6 +263,10 @@ static ssize_t pm_sleep_mode_write(struct file *file,
 		if (!enable_deep_sleep)
 			ret = -EINVAL;
 		break;
+	case AM33XX_SLEEP_RTC_ONLY:
+		if (!enable_rtc_only)
+			ret = -EINVAL;
+		break;
 	default:
 		ret = -EINVAL;
 	}
@@ -270,6 +292,20 @@ static int am33xx_do_sram_idle(long unsigned int state)
 	am33xx_do_wfi_sram(&suspend_cfg_param_list[0]);
 
 	return 0;
+}
+
+static int am33xx_pm_suspend_rtc_only(void)
+{
+	int ret;
+
+	rtc_write_scratch(omap_rtc, RTC_SCRATCH_MAGIC_REG, rtc_magic_val);
+	ret = cpu_suspend(0, am33xx_do_sram_idle);
+	if (ret != 0) {
+		rtc_write_scratch(omap_rtc, RTC_SCRATCH_MAGIC_REG, 0);
+		pr_err("AM33XX RTC-Only suspend failed\n");
+	} else
+		pwrdms_lost_power();
+	return ret;
 }
 
 static int am33xx_pm_suspend(void)
@@ -351,6 +387,28 @@ static int am33xx_pm_prepare(void)
 	return am33xx_per_save_context();
 }
 
+static int am33xx_pm_prepare_late(void)
+{
+	if (am33xx_sleep_mode == AM33XX_SLEEP_RTC_ONLY) {
+		omap_hwmod_enable(rtc_oh);
+		omap2_gpio_prepare_for_idle(1);
+		omap_gpio_save_context();
+		am33xx_wkup_save_context();
+	}
+
+	return 0;
+}
+
+static void am33xx_pm_wake(void)
+{
+	if (am33xx_sleep_mode == AM33XX_SLEEP_RTC_ONLY) {
+		am33xx_wkup_restore_context();
+		omap_gpio_restore_context();
+		omap2_gpio_resume_after_idle();
+		omap_hwmod_idle(rtc_oh);
+	}
+}
+
 static void am33xx_pm_finish(void)
 {
 	am33xx_per_restore_context();
@@ -363,7 +421,10 @@ static int am33xx_pm_enter(suspend_state_t state)
 	switch (state) {
 	case PM_SUSPEND_STANDBY:
 	case PM_SUSPEND_MEM:
-		ret = am33xx_pm_suspend();
+		if (am33xx_sleep_mode == AM33XX_SLEEP_RTC_ONLY)
+			ret = am33xx_pm_suspend_rtc_only();
+		else
+			ret = am33xx_pm_suspend();
 		break;
 	default:
 		ret = -EINVAL;
@@ -377,6 +438,9 @@ static int am33xx_pm_begin(suspend_state_t state)
 	int ret = 0;
 
 	disable_hlt();
+
+	if (am33xx_sleep_mode == AM33XX_SLEEP_RTC_ONLY)
+		return regulator_suspend_prepare(state);
 
 	/*
 	 * Populate the resume address as part of IPC data
@@ -452,9 +516,11 @@ static void am33xx_m3_state_machine_reset(void)
 
 static void am33xx_pm_end(void)
 {
-	omap_mbox_enable_irq(m3_mbox, IRQ_RX);
+	if (am33xx_sleep_mode != AM33XX_SLEEP_RTC_ONLY) {
+		omap_mbox_enable_irq(m3_mbox, IRQ_RX);
 
-	am33xx_m3_state_machine_reset();
+		am33xx_m3_state_machine_reset();
+	}
 
 	enable_hlt();
 
@@ -467,6 +533,8 @@ static const struct platform_suspend_ops am33xx_pm_ops = {
 	.enter		= am33xx_pm_enter,
 	.valid		= suspend_valid_only_mem,
 	.prepare	= am33xx_pm_prepare,
+	.prepare_late	= am33xx_pm_prepare_late,
+	.wake		= am33xx_pm_wake,
 	.finish		= am33xx_pm_finish,
 };
 
@@ -706,6 +774,69 @@ void am33xx_push_sram_idle(void)
 					(am33xx_do_wfi, am33xx_do_wfi_sz);
 }
 
+static int __init am33xx_setup_rtc_only(void)
+{
+	struct omap_hwmod_addr_space *spc;
+
+	rtc_magic_val = RTC_REG_BOOT_MAGIC;
+
+	switch (suspend_cfg_param_list[SUSP_VTP_CTRL_VAL]) {
+	case SUSP_VTP_CTRL_DDR2:
+		rtc_magic_val |= RTC_REG_DDR_TYPE_DDR2_0;
+		break;
+	case SUSP_VTP_CTRL_DDR3:
+		rtc_magic_val |= RTC_REG_DDR_TYPE_DDR3_0;
+		break;
+	}
+
+	switch (suspend_cfg_param_list[EVM_ID]) {
+	case BEAGLE_BONE_OLD:
+	case BEAGLE_BONE_A3:
+	case BEAGLE_BONE_LT:
+		rtc_magic_val |= RTC_REG_BOARD_ID_BONE;
+		break;
+	case EVM_SK:
+		rtc_magic_val |= RTC_REG_BOARD_ID_EVM_SK;
+		break;
+	}
+
+	rtc_oh = omap_hwmod_lookup("rtc");
+	if (!rtc_oh) {
+		pr_err("%s: Could not locate rtc hwmod\n", __func__);
+		return -ENOENT;
+	}
+
+	if (!per_partition || !wkup_partition)
+		return -ENODEV;
+
+	spc = rtc_oh->slaves[0]->addr;
+	omap_rtc_base = ioremap(spc->pa_start, spc->pa_end - spc->pa_start + 1);
+	if (!omap_rtc_base)
+		return -ENOENT;
+
+	omap_rtc = rtc_class_open("rtc0");
+	if (!omap_rtc) {
+		pr_err("%s: Could not locate rtc0\n", __func__);
+		goto err_unmap;
+	}
+	if (strcmp(omap_rtc->name, "am33xx-rtc")) {
+		pr_err("%s: rtc0 is not am33xx-rtc\n", __func__);
+		goto err_close;
+	}
+
+	rtc_write_scratch(omap_rtc, RTC_SCRATCH_MAGIC_REG, 0);
+	rtc_write_scratch(omap_rtc, RTC_SCRATCH_RESUME_REG,
+					virt_to_phys(am33xx_resume_vector));
+
+	return 0;
+
+err_close:
+	rtc_class_close(omap_rtc);
+err_unmap:
+	iounmap(omap_rtc_base);
+	return -ENOENT;
+}
+
 static int __init am33xx_setup_deep_sleep(void)
 {
 	int ret;
@@ -807,6 +938,14 @@ static int __init am33xx_pm_init(void)
 	if (!wkup_partition)
 		pr_err("Failed to get wkup mux partition");
 
+	ret = am33xx_setup_rtc_only();
+	if (ret < 0)
+		pr_err("RTC-only sleep not available\n");
+	else {
+		am33xx_sleep_mode = AM33XX_SLEEP_RTC_ONLY;
+		enable_rtc_only = true;
+	}
+
 	ret = am33xx_setup_deep_sleep();
 	if (ret < 0)
 		pr_err("Deep sleep modes not available\n");
@@ -815,7 +954,7 @@ static int __init am33xx_pm_init(void)
 		enable_deep_sleep = true;
 	}
 
-	if (enable_deep_sleep)
+	if (enable_deep_sleep || enable_rtc_only)
 		suspend_set_ops(&am33xx_pm_ops);
 
 #ifdef CONFIG_DEBUG_FS

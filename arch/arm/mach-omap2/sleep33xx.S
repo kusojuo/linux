@@ -132,6 +132,11 @@ wait_sc_\num:
 
 	str	r0, gpio0_addr_virt
 
+	ldr	r0, omap_rtc_addr_func
+	blx	r0
+
+	str	r0, omap_rtc_base
+
 	/* This ensures isb */
 	ldr	r0, dcache_flush
 	blx	r0
@@ -349,6 +354,139 @@ put_pll_bypass:
 	pll_bypass	per, virt_per_clk_mode, virt_per_idlest, per_val
 	pll_bypass	mpu, virt_mpu_clk_mode, virt_mpu_idlest, mpu_val
 
+	ldr	r0, sleep_mode
+	cmp	r0, #AM33XX_SLEEP_RTC_ONLY
+	bne	deepsleep
+
+	ldr	r4, omap_rtc_base
+
+	/* Make sure ALARM2 interrupt is disabled */
+	ldr	r0, [r4, #OMAP_RTC_INTERRUPTS_REG]
+	bic	r0, #OMAP_RTC_INTERRUPTS_IT_ALARM2
+	str	r0, [r4, #OMAP_RTC_INTERRUPTS_REG]
+
+	/* Clear any existing ALARM2 event */
+	mov	r0, #OMAP_RTC_STATUS_ALARM2
+	str	r0, [r4, #OMAP_RTC_STATUS_REG]
+
+	/* Enable RTC control of the PMIC_POWER_EN signal */
+	ldr	r0, [r4, #OMAP_RTC_PMIC_REG]
+	orr	r0, r0, #OMAP_RTC_PMIC_POWER_EN_EN
+	str	r0, [r4, #OMAP_RTC_PMIC_REG]
+
+	add	r0, r4, #OMAP_RTC_SECONDS_REG
+
+rtc_again:
+	ldr	r5, [r0], #4	@ Be sure to read SECONDS first
+	ldm	r0, {r6 - r10}
+	mov	r2, r5		@ save original seconds value
+
+	add	r5, r5, #1	@ Add one second
+	and	r1, r5, #0xf	@ BCD math
+	cmp	r1, #0xa
+	addeq	r5, r5, #6
+
+	cmp	r5, #0x60	@ Check for seconds rollover
+	bne	rtc_store
+
+	mov	r5, #0		@ Reset second to 0
+	add	r6, r6, #1	@ Add one minute
+	and	r1, r6, #0xf
+	cmp	r1, #0xa
+	addeq	r6, r6, #6
+
+	cmp	r6, #0x60	@ Check for minutes rollover
+	bne	rtc_store
+
+	mov	r6, #0		@ Reset minute to 0
+	add	r7, r7, #1	@ Add one hour
+	and	r1, r7, #0xf
+	cmp	r1, #0xa
+	addeq	r7, r7, #6
+
+	cmp	r7, #0x24	@ Check for hour rollover
+	bne	rtc_store
+
+	mov	r7, #0		@ Reset hour to 0
+	add	r8, r8, #1	@ Add one day
+	and	r1, r8, #0xf
+	cmp	r1, #0xa
+	addeq	r8, r8, #6
+
+	/* Compute mday rollover value */
+	cmp	r9, #2
+	bne	not_feb
+	and	r1, r10, #3	@ Sigh, BCD year, first get lower 2 bits
+	tst	r10, #0x10	@ Test if decade is odd numbers
+	eorne	r1, r1, #2	@ 1X->0X, 0X->1X
+	cmp	r1, #0		@ Final check for year divisible by 4
+	movne	r1, #0x29	@ 28 days in feb
+	moveq	r1, #0x30	@ 29 on leap year
+	b	has_day
+not_feb:
+	ldr	r1, =0x501aa	@ BCD bit map of months with 31 days
+	mov	r1, r1, lsr r9	@ Shift right by month number
+	and	r1, r1, #1	@ Clear upper bits
+	add	r1, r1, #0x31
+
+has_day:
+	cmp	r8, r1		@ Check for day rollover
+	bne	rtc_store
+
+	mov	r8, #1		@ Reset mday to 1
+	add	r9, r9, #1	@ Add one month
+	and	r1, r9, #0xf
+	cmp	r1, #0xa
+	addeq	r9, r9, #6
+
+	cmp	r9, #0x13	@ Check for month rollover
+	bne	rtc_store
+
+	mov	r9, #1		@ Reset month to 1
+	add	r10, r10, #1	@ Add one year
+	and	r1, r10, #0xf
+	cmp	r1, #0xa
+	addeq	r10, r10, #6
+	cmp	r10, #0xa0	@ Party like its 1999?
+	moveq	r10, #0		@ y2k!
+
+rtc_store:
+	ldr	r0, [r4, #OMAP_RTC_STATUS_REG]
+	tst	r0, #OMAP_RTC_STATUS_BUSY
+	bne	rtc_store
+	add	r1, r4, #OMAP_RTC_ALARM2_SECONDS_REG
+
+	/* Ok, STATUS_BUSY is clear, we have at least 15us till rollover */
+
+	/* Did the seconds reg change while we were doing our calculations? */
+	ldr	r0, [r4, #OMAP_RTC_SECONDS_REG]
+	cmp	r0, r2
+	bne	rtc_again	@ Bummer, start over
+
+	/* r5 - r10 represents the next second, store it as ALARM2 */
+	stm	r1, {r5 - r10}
+
+	/* Enable alarm2 interrupt */
+	ldr	r1, [r4, #OMAP_RTC_INTERRUPTS_REG]
+	orr	r1, #OMAP_RTC_INTERRUPTS_IT_ALARM2
+	str	r1, [r4, #OMAP_RTC_INTERRUPTS_REG]
+
+	/* Wait for seconds register to roll-over */
+wait_for_power_off:
+	ldr	r0, [r4, #OMAP_RTC_SECONDS_REG]
+	cmp	r0, r2
+	beq	wait_for_power_off
+
+	/* Wait ~100 msec to give the power off logic a chance to work */
+	mov	r0, #0x10000
+1:
+	subs	r0, r0, #1
+	bne	1b
+
+	/* Something is wrong */
+	b	abort
+
+deepsleep:
 	dsb
 	dmb
 	isb
@@ -369,7 +507,7 @@ put_pll_bypass:
 	nop
 
 	/* We come here in case of an abort */
-
+abort:
 	/* Relock the PLLs */
 	pll_lock	mpu_abt, virt_mpu_clk_mode, virt_mpu_idlest, mpu_val
 	pll_lock	per_abt, virt_per_clk_mode, virt_per_idlest, per_val
@@ -996,6 +1134,11 @@ clk_mode_disp_val:
 clk_mode_ddr_val:
 	.word	0xDEADBEEF
 clk_mode_core_val:
+	.word	0xDEADBEEF
+
+omap_rtc_addr_func:
+	.word	am33xx_get_rtc_base
+omap_rtc_base:
 	.word	0xDEADBEEF
 
 ENTRY(am33xx_do_wfi_sz)
