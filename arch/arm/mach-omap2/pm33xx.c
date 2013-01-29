@@ -25,6 +25,8 @@
 #include <linux/suspend.h>
 #include <linux/completion.h>
 #include <linux/pm_runtime.h>
+#include <linux/uaccess.h>
+#include <linux/debugfs.h>
 
 #include <mach/board-am335xevm.h>
 #include <plat/prcm.h>
@@ -45,9 +47,6 @@
 #include "control.h"
 #include "clockdomain.h"
 #include "powerdomain.h"
-
-
-#define DS_MODE		DS0_ID	/* DS0/1_ID */
 
 #ifdef CONFIG_SUSPEND
 extern void am33xx_resume_vector(void);
@@ -74,6 +73,8 @@ static int am33xx_verify_lp_state(int);
 static void am33xx_m3_state_machine_reset(void);
 
 static DECLARE_COMPLETION(a8_m3_sync);
+
+static int am33xx_sleep_mode = AM33XX_SLEEP_END;
 
 static u32 gmii_sel;
 
@@ -159,8 +160,113 @@ static void am33xx_wkup_restore_context(void)
 	omap_sram_restore_context();
 }
 
+#ifdef CONFIG_DEBUG_FS
+extern struct dentry *pm_debug_dentry;
+
+static const char *am33xx_sleep_modes[AM33XX_SLEEP_END] = {
+	[AM33XX_SLEEP_DEEPSLEEP1]	= "DeepSleep1",
+	[AM33XX_SLEEP_DEEPSLEEP0]	= "DeepSleep0",
+};
+
+static int print_sleep_mode(char *buf, int mode, int curr)
+{
+	if (mode == curr)
+		return sprintf(buf, "[%s] ", am33xx_sleep_modes[mode]);
+	else
+		return sprintf(buf, "%s ", am33xx_sleep_modes[mode]);
+}
+
+static ssize_t pm_sleep_mode_read(struct file *file,
+				  char __user *user_buf,
+				  size_t count, loff_t *ppos)
+{
+	char *buf;
+	char *s;
+	int curr;
+	ssize_t ret;
+
+	if (!count)
+		return 0;
+
+	buf = (char *) get_zeroed_page(GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	s = buf;
+	curr = am33xx_sleep_mode;
+
+	if (enable_deep_sleep) {
+		s += print_sleep_mode(s, AM33XX_SLEEP_DEEPSLEEP1, curr);
+		s += print_sleep_mode(s, AM33XX_SLEEP_DEEPSLEEP0, curr);
+	}
+
+	/* Convert the last space to a newline */
+	if (s != buf)
+		s[-1] = '\n';
+
+	ret = simple_read_from_buffer(user_buf, count, ppos, buf, s - buf);
+
+	free_page((unsigned long) buf);
+	return ret;
+}
+
+static ssize_t pm_sleep_mode_write(struct file *file,
+				   const char __user *user_buf,
+				   size_t count, loff_t *ppos)
+{
+	char *buf;
+	ssize_t ret = count;
+	int i;
+
+	if (!count)
+		return 0;
+	if (count >= PAGE_SIZE)
+		return -E2BIG;
+
+	buf = (char *) get_zeroed_page(GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	if (copy_from_user(buf, user_buf, count)) {
+		ret = -EFAULT;
+		goto out;
+	}
+
+	for (i = 0; i < AM33XX_SLEEP_END; i++) {
+		if (!am33xx_sleep_modes[i])
+			continue;
+		if (sysfs_streq(am33xx_sleep_modes[i], buf))
+			break;
+	}
+
+	switch (i) {
+	case AM33XX_SLEEP_DEEPSLEEP1:
+	case AM33XX_SLEEP_DEEPSLEEP0:
+		if (!enable_deep_sleep)
+			ret = -EINVAL;
+		break;
+	default:
+		ret = -EINVAL;
+	}
+
+	if (ret >= 0)
+		am33xx_sleep_mode = i;
+out:
+	free_page((unsigned long) buf);
+	return ret;
+}
+
+static const struct file_operations pm_sleep_mode_fops = {
+	.open	= nonseekable_open,
+	.read	= pm_sleep_mode_read,
+	.write	= pm_sleep_mode_write,
+	.llseek	= generic_file_llseek,
+};
+#endif /* CONFIG_DEBUG_FS */
+
 static int am33xx_do_sram_idle(long unsigned int state)
 {
+	suspend_cfg_param_list[SLEEP_MODE] = am33xx_sleep_mode;
 	am33xx_do_wfi_sram(&suspend_cfg_param_list[0]);
 
 	return 0;
@@ -279,7 +385,18 @@ static int am33xx_pm_begin(suspend_state_t state)
 	 * the word *after* the word which holds the resume offset
 	 */
 	am33xx_lp_ipc.resume_addr = (DS_RESUME_BASE + am33xx_resume_offset + 4);
-	am33xx_lp_ipc.sleep_mode  = DS_MODE;
+
+	switch (am33xx_sleep_mode) {
+	case AM33XX_SLEEP_DEEPSLEEP0:
+		am33xx_lp_ipc.sleep_mode = DS0_ID;
+		break;
+	case AM33XX_SLEEP_DEEPSLEEP1:
+		am33xx_lp_ipc.sleep_mode = DS1_ID;
+		break;
+	default:
+		return -EINVAL;
+	}
+
 	am33xx_lp_ipc.ipc_data1	  = DS_IPC_DEFAULT;
 	am33xx_lp_ipc.ipc_data2   = DS_IPC_DEFAULT;
 
@@ -302,7 +419,7 @@ static int am33xx_pm_begin(suspend_state_t state)
 		ret = -1;
 	} else {
 		pr_debug("Message sent for entering %s\n",
-			(DS_MODE == DS0_ID ? "DS0" : "DS1"));
+			am33xx_sleep_modes[am33xx_sleep_mode]);
 		omap_mbox_disable_irq(m3_mbox, IRQ_RX);
 	}
 
@@ -693,11 +810,21 @@ static int __init am33xx_pm_init(void)
 	ret = am33xx_setup_deep_sleep();
 	if (ret < 0)
 		pr_err("Deep sleep modes not available\n");
-	else
+	else {
+		am33xx_sleep_mode = AM33XX_SLEEP_DEEPSLEEP0;
 		enable_deep_sleep = true;
+	}
 
 	if (enable_deep_sleep)
 		suspend_set_ops(&am33xx_pm_ops);
+
+#ifdef CONFIG_DEBUG_FS
+	if (pm_debug_dentry)
+		(void) debugfs_create_file("sleep_mode", S_IRUGO | S_IWUSR,
+					   pm_debug_dentry, NULL,
+					   &pm_sleep_mode_fops);
+#endif
+
 #endif /* CONFIG_SUSPEND */
 
 	return 0;

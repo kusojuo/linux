@@ -42,6 +42,7 @@
  * 2) susp_vtp_ctrl_val [r1]
  * 3) evm_id [r2]
  * 4) cpu_rev [r3]
+ * 5) sleep_mode [r4]
  *
  * The code loads these values taking r0 value as reference to the array in
  * registers starting from r0, i,e memory_type goes to r0 and susp_vtp_ctrl_val
@@ -56,7 +57,7 @@
  */
 	.align 3
 ENTRY(am33xx_do_wfi)
-	stmfd	sp!, {r4 - r11, lr}	@ save registers on stack
+	stmfd	sp!, {r5 - r11, lr}	@ save registers on stack
 
 	.macro	pll_bypass, name, clk_mode_addr, idlest_addr, pll_mode
 pll_bypass_\name:
@@ -139,13 +140,14 @@ wait_sc_\num:
 	mov	r0, #0
 	mcr	p15, 0, r0, c7, c5, 0	@ I+BTB cache invalidate
 
-	ldm	r8, {r0-r3}		@ gather values passed
+	ldm	r8, {r0-r4}		@ gather values passed
 
 	/* Save the values passed */
 	str	r0, mem_type
 	str	r1, susp_vtp_ctrl_val
 	str	r2, evm_id
 	str	r3, cpu_rev
+	str	r4, sleep_mode
 
 	ldr	r0, emif_addr_virt
 
@@ -578,7 +580,7 @@ wait_loop4:
 
 return_to_ddr_abt:
 	mov	r0, #7
-	ldmfd	sp!, {r4 - r11, pc}	@ restore regs and return
+	ldmfd	sp!, {r5 - r11, pc}	@ restore regs and return
 
 ENTRY(am33xx_resume_offset)
 	.word . - am33xx_do_wfi
@@ -958,6 +960,8 @@ mem_type:
 evm_id:
 	.word	0xDEADBEEF
 cpu_rev:
+	.word	0xDEADBEEF
+sleep_mode:
 	.word	0xDEADBEEF
 emif_addr_virt:
 	.word	0xDEADBEEF

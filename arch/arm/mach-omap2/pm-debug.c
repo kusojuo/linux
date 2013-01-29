@@ -45,8 +45,8 @@ u32 enable_off_mode;
 #include <linux/seq_file.h>
 
 static int pm_dbg_init_done;
+struct dentry *pm_debug_dentry;
 
-static int pm_dbg_init(void);
 
 enum {
 	DEBUG_FILE_COUNTERS = 0,
@@ -260,8 +260,7 @@ static int __init pm_dbg_init(void)
 {
 	struct dentry *d;
 
-	if (pm_dbg_init_done)
-		return 0;
+	pm_debug_dentry = NULL;
 
 	d = debugfs_create_dir("pm_debug", NULL);
 	if (IS_ERR(d))
@@ -276,6 +275,7 @@ static int __init pm_dbg_init(void)
 
 	(void) debugfs_create_file("enable_off_mode", S_IRUGO | S_IWUSR, d,
 				   &enable_off_mode, &pm_dbg_option_fops);
+	pm_debug_dentry = d;
 	pm_dbg_init_done = 1;
 
 	return 0;

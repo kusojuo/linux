@@ -30,6 +30,7 @@ enum suspend_cfg_params {
 	SUSP_VTP_CTRL_VAL,
 	EVM_ID,
 	CPU_REV,
+	SLEEP_MODE,
 	SUSPEND_CFG_PARAMS_END /* Must be the last entry */
 };
 
@@ -75,5 +76,12 @@ struct a8_wkup_m3_ipc_data {
 #define CPU_REV_2		2
 
 #define M3_VERSION_UNKNOWN		0x0000ffff
+
+#define AM33XX_SLEEP_STANDBY	0
+#define AM33XX_SLEEP_DEEPSLEEP2	1
+#define AM33XX_SLEEP_DEEPSLEEP1	2
+#define AM33XX_SLEEP_DEEPSLEEP0	3
+#define AM33XX_SLEEP_RTC_ONLY	4
+#define AM33XX_SLEEP_END	5
 
 #endif
