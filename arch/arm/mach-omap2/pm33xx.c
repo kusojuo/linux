@@ -25,6 +25,7 @@
 #include <linux/suspend.h>
 #include <linux/completion.h>
 #include <linux/pm_runtime.h>
+#include <linux/reboot.h>
 
 #include <mach/board-am335xevm.h>
 #include <plat/prcm.h>
@@ -33,6 +34,7 @@
 #include <plat/omap_hwmod.h>
 #include <plat/omap_device.h>
 #include <plat/emif.h>
+#include <plat/gpio.h>
 
 #include <asm/suspend.h>
 #include <asm/proc-fns.h>
@@ -48,6 +50,8 @@
 
 
 #define DS_MODE		DS0_ID	/* DS0/1_ID */
+
+#if defined(CONFIG_SUSPEND) || defined(CONFIG_HIBERNATION)
 
 #ifdef CONFIG_SUSPEND
 extern void am33xx_resume_vector(void);
@@ -74,6 +78,7 @@ static int am33xx_verify_lp_state(int);
 static void am33xx_m3_state_machine_reset(void);
 
 static DECLARE_COMPLETION(a8_m3_sync);
+#endif /* CONFIG_SUSPEND */
 
 static u32 gmii_sel;
 
@@ -159,6 +164,7 @@ static void am33xx_wkup_restore_context(void)
 	omap_sram_restore_context();
 }
 
+#ifdef CONFIG_SUSPEND
 static int am33xx_do_sram_idle(long unsigned int state)
 {
 	am33xx_do_wfi_sram(&suspend_cfg_param_list[0]);
@@ -352,7 +358,81 @@ static const struct platform_suspend_ops am33xx_pm_ops = {
 	.prepare	= am33xx_pm_prepare,
 	.finish		= am33xx_pm_finish,
 };
+#endif /* CONFIG_SUSPEND */
 
+#ifdef CONFIG_HIBERNATION
+static int am33xx_hibernation_begin(void)
+{
+	disable_hlt();
+	return 0;
+}
+
+static int am33xx_hibernation_pre_snapshot(void)
+{
+	am33xx_per_save_context();
+
+	omap2_gpio_prepare_for_idle(1);
+	omap_gpio_save_context();
+
+	am33xx_wkup_save_context();
+
+	return 0;
+}
+
+static void am33xx_hibernation_leave(void)
+{
+	pwrdms_lost_power();
+	am33xx_wkup_restore_context();
+	omap_gpio_restore_context();
+}
+
+static void am33xx_hibernation_finish(void)
+{
+	omap2_gpio_resume_after_idle();
+	am33xx_per_restore_context();
+}
+
+static void am33xx_hibernation_end(void)
+{
+	enable_hlt();
+}
+
+static int am33xx_hibernation_prepare(void)
+{
+	return 0;
+}
+
+static int am33xx_hibernation_enter(void)
+{
+	kernel_power_off();
+	return 0;
+}
+
+static int am33xx_hibernation_pre_restore(void)
+{
+	omap2_gpio_prepare_for_idle(1);
+	return 0;
+}
+
+static void am33xx_hibernation_restore_cleanup(void)
+{
+	omap2_gpio_resume_after_idle();
+}
+
+static const struct platform_hibernation_ops am33xx_hibernation_ops = {
+	.begin			= am33xx_hibernation_begin,
+	.end			= am33xx_hibernation_end,
+	.pre_snapshot		= am33xx_hibernation_pre_snapshot,
+	.finish			= am33xx_hibernation_finish,
+	.prepare		= am33xx_hibernation_prepare,
+	.enter			= am33xx_hibernation_enter,
+	.leave			= am33xx_hibernation_leave,
+	.pre_restore		= am33xx_hibernation_pre_restore,
+	.restore_cleanup	= am33xx_hibernation_restore_cleanup,
+};
+#endif /* CONFIG_HIBERNATION */
+
+#ifdef CONFIG_SUSPEND
 int am33xx_ipc_cmd(struct a8_wkup_m3_ipc_data *data)
 {
 	writel(data->resume_addr, ipc_regs);
@@ -627,6 +707,7 @@ static int __init am33xx_setup_deep_sleep(void)
 	return ret;
 }
 #endif /* CONFIG_SUSPEND */
+#endif /* CONFIG_SUSPEND || CONFIG_HIBERNATION */
 
 static int __init am33xx_pm_init(void)
 {
@@ -699,6 +780,11 @@ static int __init am33xx_pm_init(void)
 	if (enable_deep_sleep)
 		suspend_set_ops(&am33xx_pm_ops);
 #endif /* CONFIG_SUSPEND */
+
+#ifdef CONFIG_HIBERNATION
+	if (per_partition && wkup_partition)
+		hibernation_set_ops(&am33xx_hibernation_ops);
+#endif /* CONFIG_HIBERNATION */
 
 	return 0;
 }
