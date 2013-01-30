@@ -34,6 +34,8 @@
 #include <linux/uaccess.h>
 #include <linux/irq.h>
 #include <linux/interrupt.h>
+#include <linux/export.h>
+#include <linux/syscore_ops.h>
 
 #include <asm/system.h>
 
@@ -41,7 +43,6 @@
 
 #include "control.h"
 #include "mux.h"
-#include "mux33xx.h"
 #include "prm.h"
 
 #define OMAP_MUX_BASE_OFFSET		0x30	/* Offset from CTRL_BASE */
@@ -54,6 +55,8 @@ struct omap_mux_entry {
 
 static LIST_HEAD(mux_partitions);
 static DEFINE_MUTEX(muxmode_mutex);
+
+static u32 susp_io_pad_conf_enabled;
 
 struct omap_mux_partition *omap_mux_get(const char *name)
 {
@@ -160,7 +163,8 @@ int __init omap_mux_init_gpio(int gpio, int val)
 	return -ENODEV;
 }
 
-static int __init _omap_mux_get_by_name(struct omap_mux_partition *partition,
+static int __init
+_omap_mux_get_by_name(struct omap_mux_partition *partition,
 					const char *muxname,
 					struct omap_mux **found_mux)
 {
@@ -355,6 +359,54 @@ err1:
 
 	return NULL;
 }
+
+#ifdef CONFIG_DEBUG_FS
+static int omap_mux_syscore_suspend(void)
+{
+	struct omap_mux_partition *partition;
+
+	if (!susp_io_pad_conf_enabled)
+		return 0;
+
+	list_for_each_entry(partition, &mux_partitions, node) {
+		struct omap_mux_entry *e;
+		list_for_each_entry(e, &partition->muxmodes, node) {
+			struct omap_mux *mux = &e->mux;
+			if (mux->suspend_en) {
+				mux->context = omap_mux_read(partition,
+						mux->reg_offset);
+				omap_mux_write(partition, mux->suspend_val,
+						mux->reg_offset);
+			}
+		}
+	}
+
+	return 0;
+}
+
+static void omap_mux_syscore_resume(void)
+{
+	struct omap_mux_partition *partition;
+
+	if (!susp_io_pad_conf_enabled)
+		return;
+
+	list_for_each_entry(partition, &mux_partitions, node) {
+		struct omap_mux_entry *e;
+		list_for_each_entry(e, &partition->muxmodes, node) {
+			struct omap_mux *mux = &e->mux;
+			if (mux->suspend_en)
+				omap_mux_write(partition, mux->context,
+						mux->reg_offset);
+		}
+	}
+}
+
+static struct syscore_ops omap_mux_syscore_ops = {
+	.suspend	= omap_mux_syscore_suspend,
+	.resume		= omap_mux_syscore_resume,
+};
+#endif
 
 /**
  * omap_hwmod_mux_scan_wakeups - omap hwmod scan wakeup pads
@@ -795,10 +847,152 @@ static void __init omap_mux_dbg_create_entry(
 	}
 }
 
+/*
+ * Expected input: 1/0
+ * Example: "echo 1 > enable_suspend_io_pad_conf" enables IO PAD Config
+ */
+static int susp_io_pad_enable_set(void *data, u64 val)
+{
+	u32 *enabled = data;
+
+	*enabled = val & 0x1;
+
+	return 0;
+}
+
+static int susp_io_pad_enable_get(void *data, u64 *val)
+{
+	u32 *enabled = data;
+
+	*val = *enabled;
+
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(susp_io_pad_enable_fops, susp_io_pad_enable_get,
+			susp_io_pad_enable_set, "%llx\n");
+
+static int susp_io_pad_status_show(struct seq_file *s, void *unused)
+{
+	struct omap_mux_partition *partition;
+	u32 *enabled = s->private;
+
+	if (!*enabled) {
+		pr_err("%s: IO PAD Configuration is not enabled\n", __func__);
+		return 0;
+	}
+
+	list_for_each_entry(partition, &mux_partitions, node) {
+		struct omap_mux_entry *e;
+		list_for_each_entry(e, &partition->muxmodes, node) {
+			struct omap_mux *mux = &e->mux;
+			if (mux->suspend_en) {
+				int mode = mux->suspend_val & OMAP_MUX_MODE7;
+				seq_printf(s, "%s.%s (0x%08x = 0x%02x)\n",
+					mux->muxnames[0], mux->muxnames[mode],
+					partition->phys + mux->reg_offset,
+					mux->suspend_val);
+			}
+		}
+	}
+
+	return 0;
+}
+
+/*
+ * Expected input: pinmux_name=<value1>
+ *	pinmux_name = Pin-mux name that is to be setup during suspend with value
+ *		<value1>. Pin-mux name should be in "mode0_name.function_name"
+ *		format. Internally the pin-mux offset is calculated from the
+ *		pin-mux names. Invalid pin-mux names and values are ignored.
+ *		Remember, NO spaces anywhere in the input. Use value of -1 to
+ *		disable.
+ *
+ * Example:
+ *	  echo mcasp0_aclkx.gpio3_14=0x27 > suspend_pad_conf
+ *		stores 0x27 as the value to be written to the pinmux (with
+ *		mode0_name.function_name as mcasp0_aclkx.gpio3_14) when entering
+ *		suspend
+ */
+static ssize_t susp_io_pad_write(struct file *file,
+				 const char __user *user_buf,
+				 size_t count, loff_t *ppos)
+{
+	struct seq_file *seqf;
+	u32 *enabled;
+	char *export_string, *token, *name;
+
+	seqf = file->private_data;
+	enabled = seqf->private;
+
+	if (!*enabled) {
+		pr_err("%s: IO PAD Configuration is not enabled\n", __func__);
+		return -EINVAL;
+	}
+
+	export_string = kzalloc(count + 1, GFP_KERNEL);
+	if (!export_string)
+		return -ENOMEM;
+
+	if (copy_from_user(export_string, user_buf, count)) {
+		kfree(export_string);
+		return -EFAULT;
+	}
+
+	token = export_string;
+	name = strsep(&token, "=");
+	if (name) {
+		struct omap_mux_partition *partition = NULL;
+		struct omap_mux *mux = NULL;
+		int mux_mode;
+		int val;
+		int res;
+
+		mux_mode = omap_mux_get_by_name(name, &partition, &mux);
+		if (mux_mode < 0) {
+			pr_err("%s: Invalid mux name (%s). Ignoring the"
+					" value\n", __func__, name);
+			goto err_out;
+		}
+
+		res = kstrtoint(token, 0, &val);
+		if (res < 0) {
+			pr_err("%s: Invalid value (%s). Ignoring\n",
+						__func__, token);
+			goto err_out;
+		}
+
+		mux->suspend_en = (val >= 0);
+		if (mux->suspend_en)
+			mux->suspend_val = val;
+	} else {
+		pr_err("%s: Invalid mux name (%s). Ignoring the entry\n",
+						__func__, export_string);
+	}
+
+err_out:
+	*ppos += count;
+	kfree(export_string);
+	return count;
+}
+
+static int susp_io_pad_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, susp_io_pad_status_show, inode->i_private);
+}
+
+static const struct file_operations susp_io_pad_fops = {
+	.open		= susp_io_pad_open,
+	.read		= seq_read,
+	.write		= susp_io_pad_write,
+	.release	= single_release,
+};
+
 static void __init omap_mux_dbg_init(void)
 {
 	struct omap_mux_partition *partition;
 	static struct dentry *mux_dbg_board_dir;
+	struct dentry *mux_dbg_suspend_io_conf_dir;
 
 	mux_dbg_dir = debugfs_create_dir("omap_mux", NULL);
 	if (!mux_dbg_dir)
@@ -815,9 +1009,25 @@ static void __init omap_mux_dbg_init(void)
 					  &omap_mux_dbg_board_fops);
 	}
 
-#ifdef CONFIG_SOC_OMAPAM33XX
-	(void)am33xx_mux_dbg_create_entry(mux_dbg_board_dir);
-#endif
+	/*
+	 * create a directory by the name suspend_io_pad_conf in
+	 * <debugfs-mount-dir>/<mux_dbg_dir>/
+	 */
+	mux_dbg_suspend_io_conf_dir = debugfs_create_dir("suspend_io_pad_conf",
+								mux_dbg_dir);
+	if (!mux_dbg_suspend_io_conf_dir)
+		return;
+
+	(void)debugfs_create_file("enable_suspend_io_pad_conf",
+						S_IRUGO | S_IWUSR,
+						mux_dbg_suspend_io_conf_dir,
+						&susp_io_pad_conf_enabled,
+						&susp_io_pad_enable_fops);
+	(void)debugfs_create_file("suspend_pad_conf", S_IRUGO | S_IWUSR,
+						mux_dbg_suspend_io_conf_dir,
+						&susp_io_pad_conf_enabled,
+						&susp_io_pad_fops);
+
 }
 
 #else
@@ -873,6 +1083,10 @@ static int __init omap_mux_late_init(void)
 		pr_warning("mux: Failed to setup hwmod io irq %d\n", ret);
 
 	omap_mux_dbg_init();
+
+#ifdef CONFIG_DEBUG_FS
+	register_syscore_ops(&omap_mux_syscore_ops);
+#endif
 
 	return 0;
 }

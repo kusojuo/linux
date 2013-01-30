@@ -149,7 +149,9 @@ struct omap_mux_partition {
  * @gpio:	GPIO number
  * @muxnames:	available signal modes for a ball
  * @balls:	available balls on the package
- * @partition:	mux partition
+ * @suspend_en  Write a different value to the register during suspend
+ * @suspend_val Alternate value to write during suspend
+ * @context     Original value of register before storing suspend_val
  */
 struct omap_mux {
 	u16	reg_offset;
@@ -158,6 +160,9 @@ struct omap_mux {
 	char	*muxnames[OMAP_MUX_NR_MODES];
 #ifdef CONFIG_DEBUG_FS
 	char	*balls[OMAP_MUX_NR_SIDES];
+	int	suspend_en;
+	u16	suspend_val;
+	u16	context;
 #endif
 #endif
 };
@@ -369,6 +374,3 @@ int omap_mux_init(const char *name, u32 flags,
 		  struct omap_board_mux *board_mux,
 		  struct omap_ball *package_balls);
 
-int omap_mux_get_by_name(const char *muxname,
-			struct omap_mux_partition **found_partition,
-			struct omap_mux **found_mux);
