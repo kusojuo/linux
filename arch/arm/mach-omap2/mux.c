@@ -1377,6 +1377,38 @@ static void omap_mux_init_signals(struct omap_mux_partition *partition,
 
 #endif
 
+int omap_mux_save_context(struct omap_mux_partition *partition)
+{
+	struct omap_mux_entry *e;
+
+	/*
+	 * If the padconf suspend code manages this padconf, don't save/restore
+	 * it, the padconf suspend code will.
+	 */
+	list_for_each_entry(e, &partition->muxmodes, node)
+		if (!e->mux.suspend_en)
+			e->mux.context =
+				omap_mux_read(partition, e->mux.reg_offset);
+
+	list_for_each_entry(e, &partition->unused_muxmodes, node)
+		e->mux.context = omap_mux_read(partition, e->mux.reg_offset);
+
+	return 0;
+}
+
+void omap_mux_restore_context(struct omap_mux_partition *partition)
+{
+	struct omap_mux_entry *e;
+
+	list_for_each_entry(e, &partition->muxmodes, node)
+		if (!e->mux.suspend_en)
+			omap_mux_write(partition, e->mux.context,
+					e->mux.reg_offset);
+
+	list_for_each_entry(e, &partition->unused_muxmodes, node)
+		omap_mux_write(partition, e->mux.context, e->mux.reg_offset);
+}
+
 static u32 mux_partitions_cnt;
 
 int __init omap_mux_init(const char *name, u32 flags,

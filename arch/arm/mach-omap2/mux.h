@@ -148,22 +148,24 @@ struct omap_mux_partition {
  * struct omap_mux - data for omap mux register offset and it's value
  * @reg_offset:	mux register offset from the mux base
  * @gpio:	GPIO number
+ * @context     Used store either the original value of register before
+ *		storing suspend_val or the state of the register before
+ *		losing power
+ * @suspend_en  Write a different value to the register during suspend
  * @muxnames:	available signal modes for a ball
  * @balls:	available balls on the package
- * @suspend_en  Write a different value to the register during suspend
  * @suspend_val Alternate value to write during suspend
- * @context     Original value of register before storing suspend_val
  */
 struct omap_mux {
 	u16	reg_offset;
 	u16	gpio;
+	u16	context;
+	int	suspend_en;
 #ifdef CONFIG_OMAP_MUX
 	char	*muxnames[OMAP_MUX_NR_MODES];
 #ifdef CONFIG_DEBUG_FS
 	char	*balls[OMAP_MUX_NR_SIDES];
-	int	suspend_en;
 	u16	suspend_val;
-	u16	context;
 #endif
 #endif
 };
@@ -364,6 +366,16 @@ int omap4_mux_init(struct omap_board_mux *board_subset,
  * @board_mux:		Board specific mux table
  */
 int am33xx_mux_init(struct omap_board_mux *board_mux);
+
+/**
+ * omap_mux_save_context - save state of all mux registers
+ */
+int omap_mux_save_context(struct omap_mux_partition *partition);
+
+/**
+ * omap_mux_restore_context - restore state of all mux registers
+ */
+void omap_mux_restore_context(struct omap_mux_partition *partition);
 
 /**
  * omap_mux_init - private mux init function, do not call
