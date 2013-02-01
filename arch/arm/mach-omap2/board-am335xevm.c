@@ -2514,12 +2514,13 @@ static void __init am335x_evm_i2c_init(void)
 				ARRAY_SIZE(am335x_i2c0_boardinfo));
 }
 
-void __iomem *am33xx_emif_base;
-
-void __iomem * __init am33xx_get_mem_ctlr(void)
+void __iomem *am33xx_get_ram_base(void)
 {
 
-	am33xx_emif_base = ioremap(AM33XX_EMIF0_BASE, SZ_32K);
+	static void __iomem *am33xx_emif_base;
+
+	if (!am33xx_emif_base)
+		am33xx_emif_base = ioremap(AM33XX_EMIF0_BASE, SZ_32K);
 
 	if (!am33xx_emif_base)
 		pr_warning("%s: Unable to map DDR2 controller",	__func__);
@@ -2527,16 +2528,12 @@ void __iomem * __init am33xx_get_mem_ctlr(void)
 	return am33xx_emif_base;
 }
 
-void __iomem *am33xx_get_ram_base(void)
-{
-	return am33xx_emif_base;
-}
-
-void __iomem *am33xx_gpio0_base;
-
 void __iomem *am33xx_get_gpio0_base(void)
 {
-	am33xx_gpio0_base = ioremap(AM33XX_GPIO0_BASE, SZ_4K);
+	static void __iomem *am33xx_gpio0_base;
+
+	if (!am33xx_gpio0_base)
+		am33xx_gpio0_base = ioremap(AM33XX_GPIO0_BASE, SZ_4K);
 
 	return am33xx_gpio0_base;
 }
@@ -2567,7 +2564,7 @@ static void __init am33xx_cpuidle_init(void)
 {
 	int ret;
 
-	am33xx_cpuidle_pdata.emif_base = am33xx_get_mem_ctlr();
+	am33xx_cpuidle_pdata.emif_base = am33xx_get_ram_base();
 
 	ret = platform_device_register(&am33xx_cpuidle_device);
 

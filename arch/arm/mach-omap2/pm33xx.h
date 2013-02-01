@@ -58,10 +58,7 @@ struct a8_wkup_m3_ipc_data {
 #define M3_STATE_MSG_FOR_LP		2
 #define M3_STATE_MSG_FOR_RESET		3
 
-#define VTP_CTRL_READY		(0x1 << 5)
 #define VTP_CTRL_ENABLE		(0x1 << 6)
-#define VTP_CTRL_LOCK_EN	(0x1 << 4)
-#define VTP_CTRL_START_EN	(0x1)
 
 #define DDR_IO_CTRL		(AM33XX_CTRL_BASE + 0x0E04)
 #define VTP0_CTRL_REG		(AM33XX_CTRL_BASE + 0x0E0C)

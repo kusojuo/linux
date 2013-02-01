@@ -45,24 +45,21 @@
 #include "clockdomain.h"
 #include "powerdomain.h"
 
-void (*am33xx_do_wfi_sram)(u32 *);
 
 #define DS_MODE		DS0_ID	/* DS0/1_ID */
-#define MODULE_DISABLE	0x0
-#define MODULE_ENABLE	0x2
 
 #ifdef CONFIG_SUSPEND
-void __iomem *ipc_regs;
-void __iomem *m3_eoi;
-void __iomem *m3_code;
-u32 suspend_cfg_param_list[SUSPEND_CFG_PARAMS_END];
+extern void am33xx_resume_vector(void);
+void (*am33xx_do_wfi_sram)(u32 *);
 
-bool enable_deep_sleep = true;
-static suspend_state_t suspend_state = PM_SUSPEND_ON;
+static void __iomem *ipc_regs;
+static void __iomem *m3_eoi;
+static void __iomem *m3_code;
+static u32 suspend_cfg_param_list[SUSPEND_CFG_PARAMS_END];
 
 static struct device *mpu_dev;
 static struct omap_mbox *m3_mbox;
-static struct powerdomain *cefuse_pwrdm, *gfx_pwrdm, *per_pwrdm;
+static struct powerdomain *gfx_pwrdm, *per_pwrdm;
 static struct clockdomain *gfx_l3_clkdm, *gfx_l4ls_clkdm;
 
 static int m3_state = M3_STATE_UNKNOWN;
@@ -74,16 +71,15 @@ static void am33xx_m3_state_machine_reset(void);
 
 static DECLARE_COMPLETION(a8_m3_sync);
 
-static int am33xx_pm_prepare_late(void)
+static bool enable_deep_sleep;
+
+static int am33xx_per_save_context(void)
 {
-	int ret = 0;
-
 	am335x_save_padconf();
-
-	return ret;
+	return 0;
 }
 
-static void am33xx_pm_finish(void)
+static void am33xx_per_restore_context(void)
 {
 	am335x_restore_padconf();
 }
@@ -169,11 +165,21 @@ static int am33xx_pm_suspend(void)
 	return ret;
 }
 
-static int am33xx_pm_enter(suspend_state_t unused)
+static int am33xx_pm_prepare(void)
+{
+	return am33xx_per_save_context();
+}
+
+static void am33xx_pm_finish(void)
+{
+	am33xx_per_restore_context();
+}
+
+static int am33xx_pm_enter(suspend_state_t state)
 {
 	int ret = 0;
 
-	switch (suspend_state) {
+	switch (state) {
 	case PM_SUSPEND_STANDBY:
 	case PM_SUSPEND_MEM:
 		ret = am33xx_pm_suspend();
@@ -225,7 +231,6 @@ static int am33xx_pm_begin(suspend_state_t state)
 		omap_mbox_disable_irq(m3_mbox, IRQ_RX);
 	}
 
-	suspend_state = state;
 	return ret;
 }
 
@@ -255,8 +260,6 @@ static void am33xx_m3_state_machine_reset(void)
 
 static void am33xx_pm_end(void)
 {
-	suspend_state = PM_SUSPEND_ON;
-
 	omap_mbox_enable_irq(m3_mbox, IRQ_RX);
 
 	am33xx_m3_state_machine_reset();
@@ -271,7 +274,7 @@ static const struct platform_suspend_ops am33xx_pm_ops = {
 	.end		= am33xx_pm_end,
 	.enter		= am33xx_pm_enter,
 	.valid		= suspend_valid_only_mem,
-	.prepare	= am33xx_pm_prepare_late,
+	.prepare	= am33xx_pm_prepare,
 	.finish		= am33xx_pm_finish,
 };
 
@@ -501,8 +504,6 @@ static int __init clkdms_setup(struct clockdomain *clkdm, void *unused)
 		clkdm_sleep(clkdm);
 	return 0;
 }
-#endif /* CONFIG_SUSPEND */
-
 /*
  * Push the minimal suspend-resume code to SRAM
  */
@@ -512,15 +513,52 @@ void am33xx_push_sram_idle(void)
 					(am33xx_do_wfi, am33xx_do_wfi_sz);
 }
 
-static int __init am33xx_pm_init(void)
+static int __init am33xx_setup_deep_sleep(void)
 {
 	int ret;
+
+	gfx_pwrdm = pwrdm_lookup("gfx_pwrdm");
+	if (gfx_pwrdm == NULL)
+		pr_err("Failed to get gfx_pwrdm\n");
+
+	per_pwrdm = pwrdm_lookup("per_pwrdm");
+	if (per_pwrdm == NULL)
+		pr_err("Failed to get per_pwrdm\n");
+
+	gfx_l3_clkdm = clkdm_lookup("gfx_l3_clkdm");
+	if (gfx_l3_clkdm == NULL)
+		pr_err("Failed to get gfx_l3_clkdm\n");
+
+	gfx_l4ls_clkdm = clkdm_lookup("gfx_l4ls_gfx_clkdm");
+	if (gfx_l4ls_clkdm == NULL)
+		pr_err("Failed to get gfx_l4ls_gfx_clkdm\n");
+
+	mpu_dev = omap_device_get_by_hwmod_name("mpu");
+	if (!mpu_dev) {
+		pr_warning("%s: unable to get the mpu device\n", __func__);
+		return -ENODEV;
+	}
+
+	ret = wkup_m3_init();
+	if (ret) {
+		pr_err("Could not initialise WKUP_M3. "
+			"Power management will be compromised\n");
+	}
+
+	return ret;
+}
+#endif /* CONFIG_SUSPEND */
+
+static int __init am33xx_pm_init(void)
+{
 #ifdef CONFIG_SUSPEND
+	int ret;
 	void __iomem *base;
 	u32 reg;
 	u32 evm_id;
+	struct powerdomain *cefuse_pwrdm;
+#endif /* CONFIG_SUSPEND */
 
-#endif
 	if (!cpu_is_am33xx())
 		return -ENODEV;
 
@@ -541,7 +579,6 @@ static int __init am33xx_pm_init(void)
 		suspend_cfg_param_list[SUSP_VTP_CTRL_VAL] = SUSP_VTP_CTRL_DDR2;
 	else
 		suspend_cfg_param_list[SUSP_VTP_CTRL_VAL] = SUSP_VTP_CTRL_DDR3;
-
 
 	/* Get Board Id */
 	evm_id = am335x_evm_get_id();
@@ -566,41 +603,16 @@ static int __init am33xx_pm_init(void)
 	else
 		pwrdm_set_next_pwrst(cefuse_pwrdm, PWRDM_POWER_OFF);
 
-	gfx_pwrdm = pwrdm_lookup("gfx_pwrdm");
-	if (gfx_pwrdm == NULL)
-		pr_err("Failed to get gfx_pwrdm\n");
-
-	per_pwrdm = pwrdm_lookup("per_pwrdm");
-	if (per_pwrdm == NULL)
-		pr_err("Failed to get per_pwrdm\n");
-
-	gfx_l3_clkdm = clkdm_lookup("gfx_l3_clkdm");
-	if (gfx_l3_clkdm == NULL)
-		pr_err("Failed to get gfx_l3_clkdm\n");
-
-	gfx_l4ls_clkdm = clkdm_lookup("gfx_l4ls_gfx_clkdm");
-	if (gfx_l4ls_clkdm == NULL)
-		pr_err("Failed to get gfx_l4ls_gfx_clkdm\n");
-
-	mpu_dev = omap_device_get_by_hwmod_name("mpu");
-
-	if (!mpu_dev) {
-		pr_warning("%s: unable to get the mpu device\n", __func__);
-		return -EINVAL;
-	}
-
-	ret = wkup_m3_init();
-
-	if (ret) {
-		pr_err("Could not initialise WKUP_M3. "
-			"Power management will be compromised\n");
-		enable_deep_sleep = false;
-	}
+	ret = am33xx_setup_deep_sleep();
+	if (ret < 0)
+		pr_err("Deep sleep modes not available\n");
+	else
+		enable_deep_sleep = true;
 
 	if (enable_deep_sleep)
 		suspend_set_ops(&am33xx_pm_ops);
 #endif /* CONFIG_SUSPEND */
 
-	return ret;
+	return 0;
 }
 late_initcall(am33xx_pm_init);
