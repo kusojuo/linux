@@ -39,6 +39,7 @@
 #include <asm/sizes.h>
 
 #include "pm.h"
+#include "mux.h"
 #include "cm33xx.h"
 #include "pm33xx.h"
 #include "control.h"
@@ -61,6 +62,7 @@ static struct device *mpu_dev;
 static struct omap_mbox *m3_mbox;
 static struct powerdomain *gfx_pwrdm, *per_pwrdm;
 static struct clockdomain *gfx_l3_clkdm, *gfx_l4ls_clkdm;
+static struct omap_mux_partition *per_partition;
 
 static int m3_state = M3_STATE_UNKNOWN;
 static int m3_version = M3_VERSION_UNKNOWN;
@@ -71,17 +73,31 @@ static void am33xx_m3_state_machine_reset(void);
 
 static DECLARE_COMPLETION(a8_m3_sync);
 
+static u32 gmii_sel;
+
 static bool enable_deep_sleep;
 
 static int am33xx_per_save_context(void)
 {
-	am335x_save_padconf();
-	return 0;
+	/*
+	 * Erratum 1.0.14 - 'GMII_SEL and CPSW Related Pad Control Registers:
+	 * Context of These Registers is Lost During Transitions of PD_PER'
+	 *
+	 * Save the padconf registers in the PER partition as well as the
+	 * GMII_SEL register
+	 */
+
+	gmii_sel = readl(AM33XX_CTRL_REGADDR(AM33XX_CONTROL_GMII_SEL_OFFSET));
+
+	return omap_mux_save_context(per_partition);
 }
 
 static void am33xx_per_restore_context(void)
 {
-	am335x_restore_padconf();
+	/* Restore for Erratum 1.0.14 */
+	writel(gmii_sel, AM33XX_CTRL_REGADDR(AM33XX_CONTROL_GMII_SEL_OFFSET));
+
+	omap_mux_restore_context(per_partition);
 }
 
 static int am33xx_do_sram_idle(long unsigned int state)
@@ -533,6 +549,9 @@ static int __init am33xx_setup_deep_sleep(void)
 	if (gfx_l4ls_clkdm == NULL)
 		pr_err("Failed to get gfx_l4ls_gfx_clkdm\n");
 
+	if (!per_partition)
+		return -ENODEV;
+
 	mpu_dev = omap_device_get_by_hwmod_name("mpu");
 	if (!mpu_dev) {
 		pr_warning("%s: unable to get the mpu device\n", __func__);
@@ -602,6 +621,10 @@ static int __init am33xx_pm_init(void)
 		pr_err("Failed to get cefuse_pwrdm\n");
 	else
 		pwrdm_set_next_pwrst(cefuse_pwrdm, PWRDM_POWER_OFF);
+
+	per_partition = omap_mux_get("per");
+	if (!per_partition)
+		pr_err("Failed to get per mux partition");
 
 	ret = am33xx_setup_deep_sleep();
 	if (ret < 0)

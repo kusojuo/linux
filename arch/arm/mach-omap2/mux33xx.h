@@ -246,10 +246,4 @@
 #define AM33XX_CONTROL_PADCONF_MUX_PER_SIZE			\
 		(AM33XX_CONTROL_PADCONF_MDIO_CLK_OFFSET -	\
 		 AM33XX_CONTROL_PADCONF_GPMC_A0_OFFSET + 0x4)
-
-#ifndef __ASSEMBLER__
-void am335x_save_padconf(void);
-void am335x_restore_padconf(void);
-#endif
-
 #endif

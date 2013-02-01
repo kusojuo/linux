@@ -13,7 +13,6 @@
 
 #include <mach/hardware.h>	/* XXX Is this the right one to include? */
 #include "control.h"
-#include "mux33xx.h"
 
 #ifndef __ASSEMBLER__
 extern void __iomem *am33xx_get_ram_base(void);
@@ -40,7 +39,6 @@ struct a8_wkup_m3_ipc_data {
 	int ipc_data1;
 	int ipc_data2;
 } am33xx_lp_ipc;
-
 #endif /* ASSEMBLER */
 
 #define M3_TXEV_EOI			(AM33XX_CTRL_BASE + 0x1324)
