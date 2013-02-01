@@ -71,9 +71,15 @@
 #define TPS65217_INT_PBM		BIT(6)
 #define TPS65217_INT_ACM		BIT(5)
 #define TPS65217_INT_USBM		BIT(4)
+#define TPS65217_INT_MASK_SHIFT		4
 #define TPS65217_INT_PBI		BIT(2)
 #define TPS65217_INT_ACI		BIT(1)
 #define TPS65217_INT_USBI		BIT(0)
+
+#define TPS65217_IRQ_PB			2
+#define TPS65217_IRQ_AC			1
+#define TPS65217_IRQ_USB		0
+#define TPS65217_NUM_IRQ		3
 
 #define TPS65217_CHGCONFIG0_TREG	BIT(7)
 #define TPS65217_CHGCONFIG0_DPPM	BIT(6)
@@ -220,6 +226,8 @@ enum tps65217_regulator_id {
 struct tps65217_board {
 	struct regulator_init_data *tps65217_init_data;
 	bool status_off;
+
+	int irq_base;
 };
 
 struct tps65217_rdelay {
@@ -272,6 +280,10 @@ struct tps65217 {
 
 	/* Client devices */
 	struct platform_device *regulator_pdev[TPS65217_NUM_REGULATOR];
+
+	int irq_base;
+	struct mutex irq_lock;
+	unsigned int irq_mask;
 };
 
 static inline struct tps65217 *dev_to_tps65217(struct device *dev)
@@ -287,5 +299,7 @@ int tps65217_set_bits(struct tps65217 *tps, unsigned int reg,
 		unsigned int mask, unsigned int val, unsigned int level);
 int tps65217_clear_bits(struct tps65217 *tps, unsigned int reg,
 		unsigned int mask, unsigned int level);
+
+int tps65217_irq_init(struct tps65217 *tps, int irq, int irq_base);
 
 #endif /*  __LINUX_MFD_TPS65217_H */

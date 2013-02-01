@@ -429,8 +429,16 @@
 #define OMAP_GPMC_NR_IRQS	8
 #define OMAP_GPMC_IRQ_END	(OMAP_GPMC_IRQ_BASE + OMAP_GPMC_NR_IRQS)
 
+/* TPS65217 can provide 3 interrupts */
+#define	TPS65217_IRQ_BASE	(OMAP_GPMC_IRQ_END)
+#ifdef	CONFIG_MFD_TPS65217
+#define	TPS65217_NR_IRQS	3
+#else
+#define	TPS65217_NR_IRQS	0
+#endif
+#define TPS65217_IRQ_END	(TPS65217_IRQ_BASE + TPS65217_NR_IRQS)
 
-#define NR_IRQS			OMAP_GPMC_IRQ_END
+#define NR_IRQS			TPS65217_IRQ_END
 
 #define OMAP_IRQ_BIT(irq)	(1 << ((irq) % 32))
 

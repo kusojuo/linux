@@ -1499,6 +1499,7 @@ static struct regulator_init_data tps65217_regulator_data[] = {
 static struct tps65217_board beaglebone_tps65217_info = {
 	.tps65217_init_data = &tps65217_regulator_data[0],
 	.status_off = true,
+	.irq_base = TPS65217_IRQ_BASE,
 };
 
 static struct lis3lv02d_platform_data lis331dlh_pdata = {
@@ -1774,6 +1775,7 @@ static struct i2c_board_info tps65217_i2c_boardinfo[] = {
 	{
 		I2C_BOARD_INFO("tps65217", TPS65217_I2C_ID),
 		.platform_data  = &beaglebone_tps65217_info,
+		.irq = 7,
 	},
 };
 

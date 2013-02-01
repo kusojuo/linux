@@ -183,9 +183,12 @@ static int __devinit tps65217_probe(struct i2c_client *client,
 			(version & TPS65217_CHIPID_CHIP_MASK) >> 4,
 			version & TPS65217_CHIPID_REV_MASK);
 
-	for (i = 0; i < TPS65217_NUM_REGULATOR; i++) {
-		struct platform_device *pdev;
 
+	ret = tps65217_irq_init(tps, client->irq, pdata->irq_base);
+	if (ret == 0) {
+	}
+
+	for (i = 0; i < TPS65217_NUM_REGULATOR; i++) {
 		pdev = platform_device_alloc("tps65217-pmic", i);
 		if (!pdev) {
 			dev_err(tps->dev, "Cannot create regulator %d\n", i);
