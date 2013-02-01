@@ -2009,6 +2009,8 @@ static void am335x_rtc_init(int evm_id, int profile)
 	case BEAGLE_BONE_A3:
 	case BEAGLE_BONE_OLD:
 		am335x_rtc_info.pm_off = true;
+		am335x_rtc_info.ext_wakeup_enable = true;
+		am335x_rtc_info.ext_wakeup_invert = true;
 		break;
 	default:
 		break;
