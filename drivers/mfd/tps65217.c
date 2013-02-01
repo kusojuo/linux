@@ -187,9 +187,20 @@ static int __devinit tps65217_probe(struct i2c_client *client,
 
 	ret = tps65217_irq_init(tps, client->irq, pdata->irq_base);
 	if (ret == 0) {
+		struct resource res_power[] = {
+			DEFINE_RES_IRQ(tps->irq_base + TPS65217_IRQ_AC),
+			DEFINE_RES_IRQ(tps->irq_base + TPS65217_IRQ_USB),
+		};
 		struct resource res_input[] = {
 			DEFINE_RES_IRQ(tps->irq_base + TPS65217_IRQ_PB),
 		};
+
+		pdev = platform_device_register_resndata(tps->dev,
+					"tps65217-power", 0, res_power,
+					ARRAY_SIZE(res_power), NULL, 0);
+		if (!pdev)
+			dev_err(tps->dev, "Cannot create power_supply\n");
+		tps->power_supply_pdev = pdev;
 
 		pdev = platform_device_register_resndata(tps->dev,
 					"tps65217-pwrbutton", 0, res_input,
@@ -227,6 +238,7 @@ static int __devexit tps65217_remove(struct i2c_client *client)
 	struct tps65217 *tps = i2c_get_clientdata(client);
 	int i;
 
+	platform_device_unregister(tps->power_supply_pdev);
 	platform_device_unregister(tps->pwrbutton_pdev);
 
 	for (i = 0; i < TPS65217_NUM_REGULATOR; i++)

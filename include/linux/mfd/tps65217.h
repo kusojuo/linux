@@ -264,6 +264,7 @@ struct tps_info {
 	unsigned int set_vout_mask;
 };
 
+struct power_supply;
 struct input_dev;
 
 /**
@@ -282,6 +283,7 @@ struct tps65217 {
 
 	/* Client devices */
 	struct platform_device *regulator_pdev[TPS65217_NUM_REGULATOR];
+	struct platform_device *power_supply_pdev;
 	struct platform_device *pwrbutton_pdev;
 
 	int irq_base;

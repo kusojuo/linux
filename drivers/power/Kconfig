@@ -36,6 +36,13 @@ config MAX8925_POWER
 	  Say Y here to enable support for the battery charger in the Maxim
 	  MAX8925 PMIC.
 
+config TPS65217_POWER
+        tristate "TPS65217 PMU support"
+        depends on MFD_TPS65217
+        help
+          Say Y here to enable support for the power management unit
+	  provided by the Texas Instruments TPS65217 PMIC.
+
 config WM831X_BACKUP
 	tristate "WM831X backup battery charger support"
 	depends on MFD_WM831X
