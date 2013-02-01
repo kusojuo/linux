@@ -144,6 +144,7 @@ static int __devinit tps65217_probe(struct i2c_client *client,
 	struct tps65217_board *pdata = client->dev.platform_data;
 	int i, ret;
 	unsigned int version;
+	struct platform_device *pdev;
 
 	tps = devm_kzalloc(&client->dev, sizeof(*tps), GFP_KERNEL);
 	if (!tps)
@@ -186,6 +187,16 @@ static int __devinit tps65217_probe(struct i2c_client *client,
 
 	ret = tps65217_irq_init(tps, client->irq, pdata->irq_base);
 	if (ret == 0) {
+		struct resource res_input[] = {
+			DEFINE_RES_IRQ(tps->irq_base + TPS65217_IRQ_PB),
+		};
+
+		pdev = platform_device_register_resndata(tps->dev,
+					"tps65217-pwrbutton", 0, res_input,
+					ARRAY_SIZE(res_input), NULL, 0);
+		if (!pdev)
+			dev_err(tps->dev, "Cannot create power button\n");
+		tps->pwrbutton_pdev = pdev;
 	}
 
 	for (i = 0; i < TPS65217_NUM_REGULATOR; i++) {
@@ -215,6 +226,8 @@ static int __devexit tps65217_remove(struct i2c_client *client)
 {
 	struct tps65217 *tps = i2c_get_clientdata(client);
 	int i;
+
+	platform_device_unregister(tps->pwrbutton_pdev);
 
 	for (i = 0; i < TPS65217_NUM_REGULATOR; i++)
 		platform_device_unregister(tps->regulator_pdev[i]);

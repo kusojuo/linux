@@ -264,6 +264,8 @@ struct tps_info {
 	unsigned int set_vout_mask;
 };
 
+struct input_dev;
+
 /**
  * struct tps65217 - tps65217 sub-driver chip access routines
  *
@@ -280,6 +282,7 @@ struct tps65217 {
 
 	/* Client devices */
 	struct platform_device *regulator_pdev[TPS65217_NUM_REGULATOR];
+	struct platform_device *pwrbutton_pdev;
 
 	int irq_base;
 	struct mutex irq_lock;
