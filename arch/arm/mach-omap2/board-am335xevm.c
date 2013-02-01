@@ -1297,10 +1297,10 @@ static void evm_nand_init(int evm_id, int profile)
 	omap_init_elm();
 }
 
-/* TPS65217 voltage regulator support */
+/* Beaglebone beaglebone voltage regulator support */
 
 /* 1.8V */
-static struct regulator_consumer_supply tps65217_dcdc1_consumers[] = {
+static struct regulator_consumer_supply beaglebone_dcdc1_consumers[] = {
 	{
 		.supply = "vdds_osc",
 	},
@@ -1340,35 +1340,35 @@ static struct regulator_consumer_supply tps65217_dcdc1_consumers[] = {
 };
 
 /* 1.1V */
-static struct regulator_consumer_supply tps65217_dcdc2_consumers[] = {
+static struct regulator_consumer_supply beaglebone_dcdc2_consumers[] = {
 	{
 		.supply = "vdd_mpu",
 	},
 };
 
 /* 1.1V */
-static struct regulator_consumer_supply tps65217_dcdc3_consumers[] = {
+static struct regulator_consumer_supply beaglebone_dcdc3_consumers[] = {
 	{
 		.supply = "vdd_core",
 	},
 };
 
 /* 1.8V LDO */
-static struct regulator_consumer_supply tps65217_ldo1_consumers[] = {
+static struct regulator_consumer_supply beaglebone_ldo1_consumers[] = {
 	{
 		.supply = "vdds_rtc",
 	},
 };
 
 /* 3.3V LDO */
-static struct regulator_consumer_supply tps65217_ldo2_consumers[] = {
+static struct regulator_consumer_supply beaglebone_ldo2_consumers[] = {
 	{
 		.supply = "vdds_any_pn",
 	},
 };
 
 /* 3.3V LDO */
-static struct regulator_consumer_supply tps65217_ldo3_consumers[] = {
+static struct regulator_consumer_supply beaglebone_ldo3_consumers[] = {
 	{
 		.supply = "vdds_hvx_ldo3_3p3v",
 	},
@@ -1378,7 +1378,7 @@ static struct regulator_consumer_supply tps65217_ldo3_consumers[] = {
 };
 
 /* 3.3V LDO */
-static struct regulator_consumer_supply tps65217_ldo4_consumers[] = {
+static struct regulator_consumer_supply beaglebone_ldo4_consumers[] = {
 	{
 		.supply = "vdds_hvx_ldo4_3p3v",
 	},
@@ -1398,7 +1398,7 @@ static struct tps65217_rdelay dcdc2_ramp_delay = {
 	.ramp_delay = 70000,
 };
 
-static struct regulator_init_data tps65217_regulator_data[] = {
+static struct regulator_init_data beaglebone_regulator_data[] = {
 	/* dcdc1 */
 	{
 		.constraints = {
@@ -1407,8 +1407,8 @@ static struct regulator_init_data tps65217_regulator_data[] = {
 			.boot_on = 1,
 			.always_on = 1,
 		},
-		.num_consumer_supplies = ARRAY_SIZE(tps65217_dcdc1_consumers),
-		.consumer_supplies = tps65217_dcdc1_consumers,
+		.num_consumer_supplies = ARRAY_SIZE(beaglebone_dcdc1_consumers),
+		.consumer_supplies = beaglebone_dcdc1_consumers,
 	},
 
 	/* dcdc2 */
@@ -1421,8 +1421,8 @@ static struct regulator_init_data tps65217_regulator_data[] = {
 			.boot_on = 1,
 			.always_on = 1,
 		},
-		.num_consumer_supplies = ARRAY_SIZE(tps65217_dcdc2_consumers),
-		.consumer_supplies = tps65217_dcdc2_consumers,
+		.num_consumer_supplies = ARRAY_SIZE(beaglebone_dcdc2_consumers),
+		.consumer_supplies = beaglebone_dcdc2_consumers,
 		.driver_data = &dcdc2_ramp_delay,
 	},
 
@@ -1436,8 +1436,8 @@ static struct regulator_init_data tps65217_regulator_data[] = {
 			.boot_on = 1,
 			.always_on = 1,
 		},
-		.num_consumer_supplies = ARRAY_SIZE(tps65217_dcdc3_consumers),
-		.consumer_supplies = tps65217_dcdc3_consumers,
+		.num_consumer_supplies = ARRAY_SIZE(beaglebone_dcdc3_consumers),
+		.consumer_supplies = beaglebone_dcdc3_consumers,
 	},
 
 	/* ldo1 */
@@ -1449,8 +1449,8 @@ static struct regulator_init_data tps65217_regulator_data[] = {
 			.boot_on = 1,
 			.always_on = 1,
 		},
-		.num_consumer_supplies = ARRAY_SIZE(tps65217_ldo1_consumers),
-		.consumer_supplies = tps65217_ldo1_consumers,
+		.num_consumer_supplies = ARRAY_SIZE(beaglebone_ldo1_consumers),
+		.consumer_supplies = beaglebone_ldo1_consumers,
 	},
 
 	/* ldo2 */
@@ -1463,8 +1463,8 @@ static struct regulator_init_data tps65217_regulator_data[] = {
 			.boot_on = 1,
 			.always_on = 1,
 		},
-		.num_consumer_supplies = ARRAY_SIZE(tps65217_ldo2_consumers),
-		.consumer_supplies = tps65217_ldo2_consumers,
+		.num_consumer_supplies = ARRAY_SIZE(beaglebone_ldo2_consumers),
+		.consumer_supplies = beaglebone_ldo2_consumers,
 	},
 
 	/* ldo3 */
@@ -1477,8 +1477,8 @@ static struct regulator_init_data tps65217_regulator_data[] = {
 			.boot_on = 1,
 			.always_on = 1,
 		},
-		.num_consumer_supplies = ARRAY_SIZE(tps65217_ldo3_consumers),
-		.consumer_supplies = tps65217_ldo3_consumers,
+		.num_consumer_supplies = ARRAY_SIZE(beaglebone_ldo3_consumers),
+		.consumer_supplies = beaglebone_ldo3_consumers,
 	},
 
 	/* ldo4 */
@@ -1491,13 +1491,205 @@ static struct regulator_init_data tps65217_regulator_data[] = {
 			.boot_on = 1,
 			.always_on = 1,
 		},
-		.num_consumer_supplies = ARRAY_SIZE(tps65217_ldo4_consumers),
-		.consumer_supplies = tps65217_ldo4_consumers,
+		.num_consumer_supplies = ARRAY_SIZE(beaglebone_ldo4_consumers),
+		.consumer_supplies = beaglebone_ldo4_consumers,
 	},
 };
 
 static struct tps65217_board beaglebone_tps65217_info = {
-	.tps65217_init_data = &tps65217_regulator_data[0],
+	.tps65217_init_data = &beaglebone_regulator_data[0],
+	.status_off = true,
+	.irq_base = TPS65217_IRQ_BASE,
+};
+
+/* 1.8V */
+static struct regulator_consumer_supply bblt_dcdc1_consumers[] = {
+	{
+		.supply = "vdds_pll_ddr",
+	},
+	{
+		.supply = "vdds_ddr",
+	},
+	{
+		.supply = "ddr3",
+	},
+};
+
+/* 1.1V */
+static struct regulator_consumer_supply bblt_dcdc2_consumers[] = {
+	{
+		.supply = "vdd_mpu",
+	},
+};
+
+/* 1.1V */
+static struct regulator_consumer_supply bblt_dcdc3_consumers[] = {
+	{
+		.supply = "vdd_core",
+	},
+};
+
+/* 1.8V LDO */
+static struct regulator_consumer_supply bblt_ldo1_consumers[] = {
+	{
+		.supply = "vdds_rtc",
+	},
+};
+
+/* 3.3V LDO */
+static struct regulator_consumer_supply bblt_ldo2_consumers[] = {
+	{
+		.supply = "vdds_any_pn",
+	},
+};
+
+/* 1.8V LDO */
+static struct regulator_consumer_supply bblt_ldo3_consumers[] = {
+	{
+		.supply = "vdds_osc",
+	},
+	{
+		.supply = "vdds_pll_mpu",
+	},
+	{
+		.supply = "vdds_pll_core_lcd",
+	},
+	{
+		.supply = "vdds_sram_mpu_bb",
+	},
+	{
+		.supply = "vdds_sram_core_bg",
+	},
+	{
+		.supply = "vdda_usb0_1p8v",
+	},
+	{
+		.supply = "vdds",
+	},
+	{
+		.supply = "vdds_hvx_1p8v",
+	},
+	{
+		.supply = "vdda_adc",
+	},
+};
+
+/* 3.3V LDO */
+static struct regulator_consumer_supply bblt_ldo4_consumers[] = {
+	{
+		.supply = "vdds_hvx_ldo4_3p3v",
+	},
+	{
+		.supply = "vdds_hvx_ldo3_3p3v",
+	},
+	{
+		.supply = "vdda_usb0_3p3v",
+	},
+};
+
+static struct regulator_init_data bblt_regulator_data[] = {
+	/* dcdc1 */
+	{
+		.constraints = {
+			.min_uV = 900000,
+			.max_uV = 1800000,
+			.boot_on = 1,
+			.always_on = 1,
+			.state_mem = {
+				.enabled = 1,
+			},
+		},
+		.num_consumer_supplies = ARRAY_SIZE(bblt_dcdc1_consumers),
+		.consumer_supplies = bblt_dcdc1_consumers,
+	},
+
+	/* dcdc2 */
+	{
+		.constraints = {
+			.min_uV = 900000,
+			.max_uV = 3300000,
+			.valid_ops_mask = (REGULATOR_CHANGE_VOLTAGE |
+				REGULATOR_CHANGE_STATUS),
+			.boot_on = 1,
+			.always_on = 1,
+		},
+		.num_consumer_supplies = ARRAY_SIZE(bblt_dcdc2_consumers),
+		.consumer_supplies = bblt_dcdc2_consumers,
+		.driver_data = &dcdc2_ramp_delay,
+	},
+
+	/* dcdc3 */
+	{
+		.constraints = {
+			.min_uV = 900000,
+			.max_uV = 1500000,
+			.valid_ops_mask = (REGULATOR_CHANGE_VOLTAGE |
+				REGULATOR_CHANGE_STATUS),
+			.boot_on = 1,
+			.always_on = 1,
+		},
+		.num_consumer_supplies = ARRAY_SIZE(bblt_dcdc3_consumers),
+		.consumer_supplies = bblt_dcdc3_consumers,
+	},
+
+	/* ldo1 */
+	{
+		.constraints = {
+			.min_uV = 1000000,
+			.max_uV = 3300000,
+			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+			.boot_on = 1,
+			.always_on = 1,
+		},
+		.num_consumer_supplies = ARRAY_SIZE(bblt_ldo1_consumers),
+		.consumer_supplies = bblt_ldo1_consumers,
+	},
+
+	/* ldo2 */
+	{
+		.constraints = {
+			.min_uV = 900000,
+			.max_uV = 3300000,
+			.valid_ops_mask = (REGULATOR_CHANGE_VOLTAGE |
+				REGULATOR_CHANGE_STATUS),
+			.boot_on = 1,
+			.always_on = 1,
+		},
+		.num_consumer_supplies = ARRAY_SIZE(bblt_ldo2_consumers),
+		.consumer_supplies = bblt_ldo2_consumers,
+	},
+
+	/* ldo3 */
+	{
+		.constraints = {
+			.min_uV = 1800000,
+			.max_uV = 3300000,
+			.valid_ops_mask = (REGULATOR_CHANGE_VOLTAGE |
+				REGULATOR_CHANGE_STATUS),
+			.boot_on = 1,
+			.always_on = 1,
+		},
+		.num_consumer_supplies = ARRAY_SIZE(bblt_ldo3_consumers),
+		.consumer_supplies = bblt_ldo3_consumers,
+	},
+
+	/* ldo4 */
+	{
+		.constraints = {
+			.min_uV = 1800000,
+			.max_uV = 3300000,
+			.valid_ops_mask = (REGULATOR_CHANGE_VOLTAGE |
+				REGULATOR_CHANGE_STATUS),
+			.boot_on = 1,
+			.always_on = 1,
+		},
+		.num_consumer_supplies = ARRAY_SIZE(bblt_ldo4_consumers),
+		.consumer_supplies = bblt_ldo4_consumers,
+	},
+};
+
+static struct tps65217_board beaglebone_lt_tps65217_info = {
+	.tps65217_init_data = &bblt_regulator_data[0],
 	.status_off = true,
 	.irq_base = TPS65217_IRQ_BASE,
 };
@@ -1754,6 +1946,7 @@ static void d_can_init(int evm_id, int profile)
 static void mmc0_init(int evm_id, int profile)
 {
 	switch (evm_id) {
+	case BEAGLE_BONE_LT:
 	case BEAGLE_BONE_A3:
 	case BEAGLE_BONE_OLD:
 	case EVM_SK:
@@ -1771,10 +1964,18 @@ static void mmc0_init(int evm_id, int profile)
 	return;
 }
 
-static struct i2c_board_info tps65217_i2c_boardinfo[] = {
+static struct i2c_board_info tps65217_beaglebone_i2c_boardinfo[] = {
 	{
 		I2C_BOARD_INFO("tps65217", TPS65217_I2C_ID),
 		.platform_data  = &beaglebone_tps65217_info,
+		.irq = 7,
+	},
+};
+
+static struct i2c_board_info tps65217_bblt_i2c_boardinfo[] = {
+	{
+		I2C_BOARD_INFO("tps65217", TPS65217_I2C_ID),
+		.platform_data  = &beaglebone_lt_tps65217_info,
 		.irq = 7,
 	},
 };
@@ -1799,7 +2000,15 @@ static void tps65217_init(int evm_id, int profile)
 		return;
 	}
 
-	client = i2c_new_device(adapter, tps65217_i2c_boardinfo);
+	switch (evm_id) {
+	case BEAGLE_BONE_LT:
+		client = i2c_new_device(adapter, tps65217_bblt_i2c_boardinfo);
+		break;
+	default:
+		client = i2c_new_device(adapter,
+					tps65217_beaglebone_i2c_boardinfo);
+	}
+
 	if (!client)
 		pr_err("failed to register tps65217 to i2c1\n");
 
@@ -2006,6 +2215,7 @@ static void am335x_rtc_init(int evm_id, int profile)
 	iounmap(base);
 
 	switch (evm_id) {
+	case BEAGLE_BONE_LT:
 	case BEAGLE_BONE_A3:
 	case BEAGLE_BONE_OLD:
 		am335x_rtc_info.pm_off = true;
@@ -2133,6 +2343,19 @@ static struct evm_dev_cfg beaglebone_dev_cfg[] = {
 	{NULL, 0, 0},
 };
 
+/* Beaglebone-LT */
+static struct evm_dev_cfg beaglebone_lt_dev_cfg[] = {
+	{am335x_rtc_init, DEV_ON_BASEBOARD, PROFILE_NONE},
+	{clkout2_enable, DEV_ON_BASEBOARD, PROFILE_NONE},
+	{tps65217_init,	DEV_ON_BASEBOARD, PROFILE_NONE},
+	{mii1_init,	DEV_ON_BASEBOARD, PROFILE_NONE},
+	{usb0_init,	DEV_ON_BASEBOARD, PROFILE_NONE},
+	{usb1_init,	DEV_ON_BASEBOARD, PROFILE_NONE},
+	{mmc0_init,	DEV_ON_BASEBOARD, PROFILE_NONE},
+	{i2c2_init,	DEV_ON_BASEBOARD, PROFILE_NONE},
+	{NULL, 0, 0},
+};
+
 /* EVM - Starter Kit */
 static struct evm_dev_cfg evm_sk_dev_cfg[] = {
 	{am335x_rtc_init, DEV_ON_BASEBOARD, PROFILE_ALL},
@@ -2235,6 +2458,22 @@ static void setup_beaglebone(void)
 	am33xx_cpsw_init(AM33XX_CPSW_MODE_MII, NULL, NULL);
 }
 
+/* BeagleBone LT */
+static void setup_beaglebone_lt(void)
+{
+	pr_info("The board is a AM335x Beaglebone-LT.\n");
+
+	/* Beagle Bone has Micro-SD slot which doesn't have Write Protect pin */
+	am335x_mmc[0].gpio_wp = -EINVAL;
+
+	_configure_device(BEAGLE_BONE_LT, beaglebone_lt_dev_cfg, PROFILE_NONE);
+
+	/* TPS65217 regulator has full constraints */
+	regulator_has_full_constraints();
+
+	am33xx_cpsw_init(AM33XX_CPSW_MODE_MII, NULL, NULL);
+}
+
 /* EVM - Starter Kit */
 static void setup_starterkit(void)
 {
@@ -2327,6 +2566,9 @@ static void am335x_evm_setup(struct memory_accessor *mem_acc, void *context)
 			setup_beaglebone_old();
 		else
 			setup_beaglebone();
+	} else if (!strncmp("A335BNLT", config.name, 8)) {
+		daughter_brd_detected = false;
+		setup_beaglebone_lt();
 	} else if (!strncmp("A335X_SK", config.name, 8)) {
 		daughter_brd_detected = false;
 		setup_starterkit();
