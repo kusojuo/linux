@@ -47,6 +47,7 @@
 #include <asm/smp_twd.h>
 
 #include "omap_hwmod.h"
+#include "clock.h"
 #include "omap_device.h"
 #include <plat/counter-32k.h>
 #include <plat/dmtimer.h>
@@ -396,11 +397,50 @@ static cycle_t clocksource_read_cycles(struct clocksource *cs)
 						     OMAP_TIMER_NONPOSTED);
 }
 
+static cycle_t clksrc_suspend_cyc;
+
+static void omap_clksrc_suspend(struct clocksource *cs)
+{
+	char name[10];
+	struct omap_hwmod *oh;
+
+	sprintf(name, "timer%d", clksrc.id);
+	oh = omap_hwmod_lookup(name);
+	if (!oh)
+		return;
+
+	clksrc_suspend_cyc = (cycle_t)__omap_dm_timer_read_counter(&clksrc, 1);
+	clksrc.ctx_loss_count = omap_hwmod_get_context_loss_count(oh);
+}
+
+static void omap_clksrc_resume(struct clocksource *cs)
+{
+	char name[10];
+	struct omap_hwmod *oh;
+	u32 ctx_loss_cnt_after;
+
+	sprintf(name, "timer%d", clksrc.id);
+	oh = omap_hwmod_lookup(name);
+	if (!oh)
+		return;
+
+	ctx_loss_cnt_after = omap_hwmod_get_context_loss_count(oh);
+	if (ctx_loss_cnt_after != clksrc.ctx_loss_count) {
+		omap_hwmod_reset(oh);
+		__omap_dm_timer_load_start(&clksrc,
+				OMAP_TIMER_CTRL_ST | OMAP_TIMER_CTRL_AR,
+				clksrc_suspend_cyc, 1);
+		__omap_dm_timer_int_enable(&clksrc, OMAP_TIMER_INT_OVERFLOW);
+	}
+}
+
 static struct clocksource clocksource_gpt = {
 	.rating		= 300,
 	.read		= clocksource_read_cycles,
 	.mask		= CLOCKSOURCE_MASK(32),
 	.flags		= CLOCK_SOURCE_IS_CONTINUOUS,
+	.suspend	= omap_clksrc_suspend,
+	.resume		= omap_clksrc_resume,
 };
 
 static u32 notrace dmtimer_read_sched_clock(void)
@@ -486,6 +526,7 @@ static void __init omap2_gptimer_clocksource_init(int gptimer_id,
 
 	clksrc.id = gptimer_id;
 	clksrc.errata = omap_dm_timer_get_errata();
+	clksrc.id = gptimer_id;
 
 	res = omap_dm_timer_init_one(&clksrc, fck_source, property,
 				     &clocksource_gpt.name,
