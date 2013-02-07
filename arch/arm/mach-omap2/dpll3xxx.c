@@ -669,6 +669,87 @@ unsigned long omap3_clkoutx2_recalc(struct clk_hw *hw,
 	return rate;
 }
 
+int omap3_core_dpll_save_context(struct clk_hw *hw)
+{
+	struct clk_hw_omap *clk = to_clk_hw_omap(hw);
+	struct dpll_data *dd;
+	u32 v;
+
+	dd = clk->dpll_data;
+
+	v = __raw_readl(dd->control_reg);
+	clk->context = (v & dd->enable_mask) >> __ffs(dd->enable_mask);
+
+	if (clk->context == DPLL_LOCKED) {
+		v = __raw_readl(dd->mult_div1_reg);
+		dd->last_rounded_m = (v & dd->mult_mask) >>
+						__ffs(dd->mult_mask);
+		dd->last_rounded_n = ((v & dd->div1_mask) >>
+						__ffs(dd->div1_mask)) + 1;
+	}
+
+	return 0;
+}
+
+void omap3_core_dpll_restore_context(struct clk_hw *hw)
+{
+	struct clk_hw_omap *clk = to_clk_hw_omap(hw);
+	const struct dpll_data *dd;
+	u32 v;
+
+	dd = clk->dpll_data;
+
+	if (clk->context == DPLL_LOCKED) {
+		_omap3_dpll_write_clken(clk, 0x4);
+		_omap3_wait_dpll_status(clk, 0);
+
+		v = __raw_readl(dd->mult_div1_reg);
+		v &= ~(dd->mult_mask | dd->div1_mask);
+		v |= dd->last_rounded_m << __ffs(dd->mult_mask);
+		v |= (dd->last_rounded_n - 1) << __ffs(dd->div1_mask);
+		__raw_writel(v, dd->mult_div1_reg);
+
+		_omap3_dpll_write_clken(clk, DPLL_LOCKED);
+		_omap3_wait_dpll_status(clk, 1);
+	} else
+		_omap3_dpll_write_clken(clk, clk->context);
+}
+
+int omap3_noncore_dpll_save_context(struct clk_hw *hw)
+{
+	struct clk_hw_omap *clk = to_clk_hw_omap(hw);
+	struct dpll_data *dd;
+	u32 v;
+
+	dd = clk->dpll_data;
+
+	v = __raw_readl(dd->control_reg);
+	clk->context = (v & dd->enable_mask) >> __ffs(dd->enable_mask);
+
+	if (clk->context == DPLL_LOCKED) {
+		v = __raw_readl(dd->mult_div1_reg);
+		dd->last_rounded_m = (v & dd->mult_mask) >>
+						__ffs(dd->mult_mask);
+		dd->last_rounded_n = ((v & dd->div1_mask) >>
+						__ffs(dd->div1_mask)) + 1;
+	}
+
+	return 0;
+}
+
+void omap3_noncore_dpll_restore_context(struct clk_hw *hw)
+{
+	struct clk_hw_omap *clk = to_clk_hw_omap(hw);
+	const struct dpll_data *dd;
+
+	dd = clk->dpll_data;
+
+	if (clk->context == DPLL_LOCKED)
+		omap3_noncore_dpll_program(clk, 0);
+	else
+		_omap3_dpll_write_clken(clk, clk->context);
+}
+
 /* OMAP3/4 non-CORE DPLL clkops */
 const struct clk_hw_omap_ops clkhwops_omap3_dpll = {
 	.allow_idle	= omap3_dpll_allow_idle,

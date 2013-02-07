@@ -103,10 +103,25 @@ static int clk_mux_set_parent(struct clk_hw *hw, u8 index)
 	return 0;
 }
 
+static int clk_mux_save_context(struct clk_hw *hw)
+{
+	struct clk_mux *mux = to_clk_mux(hw);
+	mux->saved_parent = clk_mux_get_parent(hw);
+	return 0;
+}
+
+static void clk_mux_restore_context(struct clk_hw *hw)
+{
+	struct clk_mux *mux = to_clk_mux(hw);
+	clk_mux_set_parent(hw, mux->saved_parent);
+}
+
 const struct clk_ops clk_mux_ops = {
 	.get_parent = clk_mux_get_parent,
 	.set_parent = clk_mux_set_parent,
 	.determine_rate = __clk_mux_determine_rate,
+	.save_context = clk_mux_save_context,
+	.restore_context = clk_mux_restore_context,
 };
 EXPORT_SYMBOL_GPL(clk_mux_ops);
 
