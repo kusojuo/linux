@@ -202,6 +202,7 @@ struct powerdomain {
 	s64 timer;
 	s64 fpwrst_timer[PWRDM_FPWRSTS_COUNT];
 #endif
+	u32 context;
 };
 
 /**
@@ -244,6 +245,8 @@ struct pwrdm_ops {
 	int	(*pwrdm_disable_hdwr_sar)(struct powerdomain *pwrdm);
 	int	(*pwrdm_set_lowpwrstchange)(struct powerdomain *pwrdm);
 	int	(*pwrdm_wait_transition)(struct powerdomain *pwrdm);
+	void	(*pwrdm_save_context)(struct powerdomain *pwrdm);
+	void	(*pwrdm_restore_context)(struct powerdomain *pwrdm);
 };
 
 int pwrdm_register_platform_funcs(struct pwrdm_ops *custom_funcs);
@@ -315,5 +318,10 @@ extern void pwrdm_unlock(struct powerdomain *pwrdm);
 /* Debugfs functions */
 extern int pwrdm_dbg_show_counter(struct powerdomain *pwrdm, void *seq_file);
 extern int pwrdm_dbg_show_timer(struct powerdomain *pwrdm, void *seq_file);
+
+extern void pwrdms_save_context(void);
+extern void pwrdms_restore_context(void);
+
+extern void pwrdms_lost_power(void);
 
 #endif
