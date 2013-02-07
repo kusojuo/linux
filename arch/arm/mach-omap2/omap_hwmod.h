@@ -153,6 +153,7 @@ struct omap_hwmod_rst_info {
 	const char	*name;
 	u8		rst_shift;
 	u8		st_shift;
+	u8		context;
 };
 
 /**
@@ -669,6 +670,9 @@ int omap_hwmod_pad_route_irq(struct omap_hwmod *oh, int pad_idx, int irq_idx);
 extern void __init omap_hwmod_init(void);
 
 const char *omap_hwmod_get_main_clk(struct omap_hwmod *oh);
+
+void omap_hwmods_save_context(void);
+void omap_hwmods_restore_context(void);
 
 /*
  * Chip variant-specific hwmod init routines - XXX should be converted
