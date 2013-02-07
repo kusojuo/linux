@@ -62,6 +62,11 @@ struct clk_hw;
  *		Called with enable_lock held.  This function must not
  *		sleep.
  *
+ * @save_context: Save the context of the clock in prepration for poweroff.
+ *
+ * @restore_context: Restore the context of the clock after a restoration
+ *		of power.
+ *
  * @recalc_rate	Recalculate the rate of this clock, by querying hardware. The
  * 		parent rate is an input parameter.  It is up to the caller to
  * 		ensure that the prepare_mutex is held across this call.
@@ -112,6 +117,8 @@ struct clk_ops {
 	void		(*disable)(struct clk_hw *hw);
 	int		(*is_enabled)(struct clk_hw *hw);
 	void		(*disable_unused)(struct clk_hw *hw);
+	int		(*save_context)(struct clk_hw *hw);
+	void		(*restore_context)(struct clk_hw *hw);
 	unsigned long	(*recalc_rate)(struct clk_hw *hw,
 					unsigned long parent_rate);
 	long		(*round_rate)(struct clk_hw *hw, unsigned long,
@@ -251,6 +258,7 @@ struct clk_divider {
 	u8		flags;
 	const struct clk_div_table	*table;
 	spinlock_t	*lock;
+	u32		context;
 };
 
 #define CLK_DIVIDER_ONE_BASED		BIT(0)
@@ -380,6 +388,8 @@ struct clk_onecell_data {
 struct clk *of_clk_src_onecell_get(struct of_phandle_args *clkspec, void *data);
 const char *of_clk_get_parent_name(struct device_node *np, int index);
 void of_clk_init(const struct of_device_id *matches);
+
+void clk_dflt_restore_context(struct clk_hw *hw);
 
 #endif /* CONFIG_COMMON_CLK */
 #endif /* CLK_PROVIDER_H */
