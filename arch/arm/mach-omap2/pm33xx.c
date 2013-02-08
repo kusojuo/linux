@@ -382,7 +382,7 @@ exit:
 /*
  * Push the minimal suspend-resume code to SRAM
  */
-void am33xx_push_sram_idle(void)
+static void am33xx_push_sram_idle(void)
 {
 	am33xx_do_wfi_sram = (void *)omap_sram_push
 					(am33xx_do_wfi, am33xx_do_wfi_sz);
@@ -411,6 +411,8 @@ int __init am33xx_pm_init(void)
 		return -ENODEV;
 
 	pr_info("Power Management for AM33XX family\n");
+
+	am33xx_push_sram_idle();
 
 	/*
 	 * By default the following IPs do not have MSTANDBY asserted
