@@ -263,19 +263,11 @@ u32 omap3_configure_core_dpll(u32 m2, u32 unlock_dll, u32 f, u32 inc,
 			sdrc_actim_ctrl_b_1, sdrc_mr_1);
 }
 
-void omap3_sram_restore_context(void)
+static inline int omap34xx_sram_init(void)
 {
-	omap_sram_reset();
-
 	_omap3_sram_configure_core_dpll =
 		omap_sram_push(omap3_sram_configure_core_dpll,
 			       omap3_sram_configure_core_dpll_sz);
-	omap_push_sram_idle();
-}
-
-static inline int omap34xx_sram_init(void)
-{
-	omap3_sram_restore_context();
 	return 0;
 }
 #else
@@ -284,19 +276,6 @@ static inline int omap34xx_sram_init(void)
 	return 0;
 }
 #endif /* CONFIG_ARCH_OMAP3 */
-
-#ifdef CONFIG_SOC_AM33XX
-static inline int am33xx_sram_init(void)
-{
-	am33xx_push_sram_idle();
-	return 0;
-}
-#else
-static inline int am33xx_sram_init(void)
-{
-	return 0;
-}
-#endif
 
 int __init omap_sram_init(void)
 {
@@ -307,8 +286,6 @@ int __init omap_sram_init(void)
 		omap242x_sram_init();
 	else if (cpu_is_omap2430())
 		omap243x_sram_init();
-	else if (soc_is_am33xx())
-		am33xx_sram_init();
 	else if (cpu_is_omap34xx())
 		omap34xx_sram_init();
 

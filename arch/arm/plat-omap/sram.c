@@ -35,6 +35,10 @@ static unsigned long omap_sram_skip;
 static unsigned long omap_sram_size;
 static void __iomem *omap_sram_ceil;
 
+#ifdef CONFIG_PM
+static char *omap_sram_backup;
+#endif
+
 /*
  * Memory allocator for SRAM: calculates the new ceiling address
  * for pushing a function using the fncpy API.
@@ -60,14 +64,27 @@ void *omap_sram_push_address(unsigned long size)
 	return (void *)omap_sram_ceil;
 }
 
-/*
- * The SRAM context is lost during off-idle and stack
- * needs to be reset.
- */
-void omap_sram_reset(void)
+#ifdef CONFIG_PM
+void omap_sram_save_context(void)
 {
-	omap_sram_ceil = omap_sram_base + omap_sram_size;
+	if (omap_sram_backup) {
+		unsigned long start = omap_sram_ceil - omap_sram_base;
+		memcpy(omap_sram_backup, omap_sram_base, omap_sram_skip);
+		memcpy(omap_sram_backup + start, omap_sram_ceil,
+							omap_sram_size - start);
+	}
 }
+
+void omap_sram_restore_context(void)
+{
+	if (omap_sram_backup) {
+		unsigned long start = omap_sram_ceil - omap_sram_base;
+		memcpy(omap_sram_base, omap_sram_backup, omap_sram_skip);
+		memcpy(omap_sram_ceil, omap_sram_backup + start,
+							omap_sram_size - start);
+	}
+}
+#endif
 
 /*
  * Note that we cannot use ioremap for SRAM, as clock init needs SRAM early.
@@ -87,7 +104,11 @@ void __init omap_map_sram(unsigned long start, unsigned long size,
 		return;
 	}
 
-	omap_sram_reset();
+#ifdef CONFIG_PM
+	omap_sram_backup = kmalloc(omap_sram_size, GFP_KERNEL);
+#endif
+
+	omap_sram_ceil = omap_sram_base + omap_sram_size;
 
 	/*
 	 * Looks like we need to preserve some bootloader code at the

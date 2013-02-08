@@ -294,7 +294,7 @@ static struct wkup_m3_ops am33xx_wkup_m3_ops = {
 /*
  * Push the minimal suspend-resume code to SRAM
  */
-void am33xx_push_sram_idle(void)
+static void am33xx_push_sram_idle(void)
 {
 	am33xx_do_wfi_sram = (void *)omap_sram_push
 					(am33xx_do_wfi, am33xx_do_wfi_sz);
@@ -344,6 +344,8 @@ int __init am33xx_pm_init(void)
 		pr_err("PM: Could not ioremap EMIF\n");
 		goto err;
 	}
+
+	am33xx_push_sram_idle();
 
 	/* Determine Memory Type */
 	temp = readl(am33xx_emif_base + EMIF_SDRAM_CONFIG);
