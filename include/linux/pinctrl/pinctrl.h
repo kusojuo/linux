@@ -155,6 +155,8 @@ struct pinctrl_dev *of_pinctrl_get(struct device_node *np)
 
 extern const char *pinctrl_dev_get_name(struct pinctrl_dev *pctldev);
 extern void *pinctrl_dev_get_drvdata(struct pinctrl_dev *pctldev);
+extern struct pinctrl_dev *get_pinctrl_dev_from_devname(const char *dev_name);
+extern struct pinctrl_dev *get_pinctrl_dev_from_dev(struct device *dev);
 #else
 
 struct pinctrl_dev;
@@ -163,6 +165,17 @@ struct pinctrl_dev;
 static inline bool pin_is_valid(struct pinctrl_dev *pctldev, int pin)
 {
 	return pin >= 0;
+}
+
+static inline struct pinctrl_dev *get_pinctrl_dev_from_devname(
+							const char *dev_name)
+{
+	return NULL;
+}
+
+static inline struct pinctrl_dev *get_pinctrl_dev_from_dev(struct device *dev)
+{
+	return NULL;
 }
 
 #endif /* !CONFIG_PINCTRL */
