@@ -136,6 +136,33 @@ struct pinctrl_dev *get_pinctrl_dev_from_of_node(struct device_node *np)
 
 	return NULL;
 }
+EXPORT_SYMBOL_GPL(get_pinctrl_dev_from_devname);
+
+/**
+ * get_pinctrl_dev_from_dev() - look up pin controller device
+ * @dev: the device instance
+ *
+ * Looks up a pin control device matching a pure device pointer
+ */
+struct pinctrl_dev *get_pinctrl_dev_from_dev(struct device *dev)
+{
+	struct pinctrl_dev *pctldev = NULL;
+	bool found = false;
+
+	if (!dev)
+		return NULL;
+
+	list_for_each_entry(pctldev, &pinctrldev_list, node) {
+		if (pctldev->dev == dev) {
+			/* Matched on device name */
+			found = true;
+			break;
+		}
+	}
+
+	return found ? pctldev : NULL;
+}
+EXPORT_SYMBOL_GPL(get_pinctrl_dev_from_dev);
 
 /**
  * pin_get_from_name() - look up a pin number from a name
