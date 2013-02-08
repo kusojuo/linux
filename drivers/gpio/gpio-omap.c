@@ -70,7 +70,6 @@ struct gpio_bank {
 	struct device *dev;
 	bool is_mpuio;
 	bool dbck_flag;
-	bool loses_context;
 	int stride;
 	u32 width;
 	int context_loss_count;
@@ -1124,7 +1123,6 @@ static int omap_gpio_probe(struct platform_device *pdev)
 	bank->width = pdata->bank_width;
 	bank->is_mpuio = pdata->is_mpuio;
 	bank->non_wakeup_gpios = pdata->non_wakeup_gpios;
-	bank->loses_context = pdata->loses_context;
 	bank->regs = pdata->regs;
 #ifdef CONFIG_OF_GPIO
 	bank->chip.of_node = of_node_get(node);
@@ -1178,8 +1176,7 @@ static int omap_gpio_probe(struct platform_device *pdev)
 	omap_gpio_chip_init(bank);
 	omap_gpio_show_rev(bank);
 
-	if (bank->loses_context)
-		bank->get_context_loss_count = pdata->get_context_loss_count;
+	bank->get_context_loss_count = pdata->get_context_loss_count;
 
 	pm_runtime_put(bank->dev);
 
@@ -1363,7 +1360,7 @@ void omap2_gpio_prepare_for_idle(int pwr_mode)
 	struct gpio_bank *bank;
 
 	list_for_each_entry(bank, &omap_gpio_list, node) {
-		if (!bank->mod_usage || !bank->loses_context)
+		if (!bank->mod_usage)
 			continue;
 
 		bank->power_mode = pwr_mode;
@@ -1377,7 +1374,7 @@ void omap2_gpio_resume_after_idle(void)
 	struct gpio_bank *bank;
 
 	list_for_each_entry(bank, &omap_gpio_list, node) {
-		if (!bank->mod_usage || !bank->loses_context)
+		if (!bank->mod_usage)
 			continue;
 
 		pm_runtime_get_sync(bank->dev);
