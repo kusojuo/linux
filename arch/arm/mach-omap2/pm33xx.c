@@ -47,6 +47,7 @@
 #include "sram.h"
 
 void (*am33xx_do_wfi_sram)(void);
+static void wkup_m3_reinitialize(void);
 
 static void __iomem *am33xx_emif_base;
 static struct powerdomain *gfx_pwrdm, *per_pwrdm;
@@ -80,6 +81,39 @@ static void am33xx_per_restore_context(void)
 	writel(gmii_sel, AM33XX_CTRL_REGADDR(AM33XX_CONTROL_GMII_SEL_OFFSET));
 
 	pinmux_restore_context(pmx_dev, "am33xx_pmx_per");
+}
+
+static int am33xx_wkup_save_context(void)
+{
+	int ret;
+
+	ret = pinmux_save_context(pmx_dev, "am33xx_pmx_wkup");
+	if (ret < 0)
+		return ret;
+
+	omap_intc_save_context();
+	am33xx_control_save_context();
+
+	clks_save_context();
+	pwrdms_save_context();
+	omap_hwmods_save_context();
+	clkdm_save_context();
+	omap_sram_save_context();
+
+	return 0;
+}
+
+static void am33xx_wkup_restore_context(void)
+{
+	clks_restore_context();
+	pwrdms_restore_context();
+	clkdm_restore_context();
+	omap_hwmods_restore_context();
+	am33xx_control_restore_context();
+	pinmux_restore_context(pmx_dev, "am33xx_pmx_wkup");
+	omap_intc_restore_context();
+	wkup_m3_reinitialize();
+	omap_sram_restore_context();
 }
 
 static int am33xx_do_sram_idle(long unsigned int unused)
