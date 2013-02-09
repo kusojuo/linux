@@ -251,6 +251,30 @@ static const struct platform_suspend_ops am33xx_pm_ops = {
 	.valid		= suspend_valid_only_mem,
 };
 
+static void wkup_m3_reinitialize(void)
+{
+	struct platform_device *pdev = to_platform_device(wkup_m3->dev);
+	int ret;
+
+	wkup_m3->state = M3_STATE_UNKNOWN;
+
+	ret = omap_device_assert_hardreset(pdev, "wkup_m3");
+	if (ret < 0)
+		goto err;
+
+	memcpy(wkup_m3->code, wkup_m3->firmware->data, wkup_m3->firmware->size);
+	wkup_m3->state = M3_STATE_RESET;
+
+	ret = omap_device_deassert_hardreset(pdev, "wkup_m3");
+	if (ret < 0)
+		goto err;
+
+	return;
+
+err:
+	pr_err("Could not restore M3 context\n");
+}
+
 static void am33xx_m3_state_machine_reset(void)
 {
 	int ret = 0;
@@ -337,6 +361,7 @@ static void am33xx_pm_firmware_cb(const struct firmware *fw, void *context)
 	pr_info("Copied the M3 firmware to UMEM\n");
 
 	wkup_m3->state = M3_STATE_RESET;
+	wkup_m3->firmware = fw;
 
 	ret = omap_device_deassert_hardreset(pdev, "wkup_m3");
 	if (ret) {
