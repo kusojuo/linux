@@ -391,9 +391,9 @@ static int omap_wdt_remove(struct platform_device *pdev)
  * may not play well enough with NOWAYOUT...
  */
 
-static int omap_wdt_suspend(struct platform_device *pdev, pm_message_t state)
+static int omap_wdt_suspend(struct device *dev)
 {
-	struct watchdog_device *wdog = platform_get_drvdata(pdev);
+	struct watchdog_device *wdog = dev_get_drvdata(dev);
 	struct omap_wdt_dev *wdev = watchdog_get_drvdata(wdog);
 
 	mutex_lock(&wdev->lock);
@@ -406,9 +406,9 @@ static int omap_wdt_suspend(struct platform_device *pdev, pm_message_t state)
 	return 0;
 }
 
-static int omap_wdt_resume(struct platform_device *pdev)
+static int omap_wdt_resume(struct device *dev)
 {
-	struct watchdog_device *wdog = platform_get_drvdata(pdev);
+	struct watchdog_device *wdog = dev_get_drvdata(dev);
 	struct omap_wdt_dev *wdev = watchdog_get_drvdata(wdog);
 
 	mutex_lock(&wdev->lock);
@@ -422,9 +422,32 @@ static int omap_wdt_resume(struct platform_device *pdev)
 	return 0;
 }
 
-#else
-#define	omap_wdt_suspend	NULL
-#define	omap_wdt_resume		NULL
+static int omap_wdt_restore(struct device *dev)
+{
+	struct watchdog_device *wdog = dev_get_drvdata(dev);
+	struct omap_wdt_dev *wdev = watchdog_get_drvdata(wdog);
+
+	omap_wdt_resume(dev);
+
+	/*
+	 * We don't know what the resume kernel last pinged the WDT with. If
+	 * it pinged it with the same value we ping it with, the ping will be
+	 * ignored. Double ping to be sure we reset the timer.
+	 */
+	if (wdev->omap_wdt_users)
+		omap_wdt_ping(wdog);
+
+	return 0;
+}
+
+static const struct dev_pm_ops omap_wdt_pm_ops = {
+	.suspend	= omap_wdt_suspend,
+	.freeze		= omap_wdt_suspend,
+	.poweroff	= omap_wdt_suspend,
+	.resume		= omap_wdt_resume,
+	.thaw		= omap_wdt_resume,
+	.restore	= omap_wdt_restore,
+};
 #endif
 
 static const struct of_device_id omap_wdt_of_match[] = {
@@ -438,12 +461,13 @@ static struct platform_driver omap_wdt_driver = {
 	.probe		= omap_wdt_probe,
 	.remove		= omap_wdt_remove,
 	.shutdown	= omap_wdt_shutdown,
-	.suspend	= omap_wdt_suspend,
-	.resume		= omap_wdt_resume,
 	.driver		= {
 		.owner	= THIS_MODULE,
 		.name	= "omap_wdt",
 		.of_match_table = omap_wdt_of_match,
+#ifdef CONFIG_PM
+		.pm	= &omap_wdt_pm_ops,
+#endif
 	},
 };
 
