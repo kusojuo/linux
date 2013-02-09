@@ -30,6 +30,9 @@
 #include <linux/omap-mailbox.h>
 #include <linux/pinctrl/pinctrl.h>
 #include <linux/pinctrl/pinmux.h>
+#include <linux/platform_data/gpio-omap.h>
+#include <linux/reboot.h>
+#include <linux/cpu.h>
 
 #include <asm/suspend.h>
 #include <asm/proc-fns.h>
@@ -62,7 +65,7 @@ static u32 gmii_sel;
 
 static struct am33xx_suspend_params susp_params;
 
-#ifdef CONFIG_SUSPEND
+#if defined(CONFIG_SUSPEND) || defined(CONFIG_HIBERNATION)
 static int am33xx_per_save_context(void)
 {
 	/*
@@ -118,7 +121,9 @@ static void am33xx_wkup_restore_context(void)
 	wkup_m3_reinitialize();
 	omap_sram_restore_context();
 }
+#endif /* CONFIG_SUSPEND || CONFIG_HIBERNATION */
 
+#ifdef CONFIG_SUSPEND
 static int am33xx_do_sram_idle(long unsigned int unused)
 {
 	am33xx_do_wfi_sram(&susp_params);
@@ -304,6 +309,74 @@ static const struct platform_suspend_ops am33xx_pm_ops = {
 };
 #endif /* CONFIG_SUSPEND */
 
+#ifdef CONFIG_HIBERNATION
+static int am33xx_hibernation_begin(void)
+{
+	cpu_idle_poll_ctrl(true);
+	return 0;
+}
+
+static int am33xx_hibernation_pre_snapshot(void)
+{
+	am33xx_per_save_context();
+	omap2_gpio_prepare_for_idle(1);
+	am33xx_wkup_save_context();
+
+	return 0;
+}
+
+static void am33xx_hibernation_leave(void)
+{
+	pwrdms_lost_power();
+	am33xx_wkup_restore_context();
+}
+
+static void am33xx_hibernation_finish(void)
+{
+	omap2_gpio_resume_after_idle();
+	am33xx_per_restore_context();
+}
+
+static void am33xx_hibernation_end(void)
+{
+	cpu_idle_poll_ctrl(false);
+}
+
+static int am33xx_hibernation_prepare(void)
+{
+	return 0;
+}
+
+static int am33xx_hibernation_enter(void)
+{
+	machine_power_off();
+	return 0;
+}
+
+static int am33xx_hibernation_pre_restore(void)
+{
+	omap2_gpio_prepare_for_idle(1);
+	return 0;
+}
+
+static void am33xx_hibernation_restore_cleanup(void)
+{
+	omap2_gpio_resume_after_idle();
+}
+
+static const struct platform_hibernation_ops am33xx_hibernation_ops = {
+	.begin			= am33xx_hibernation_begin,
+	.end			= am33xx_hibernation_end,
+	.pre_snapshot		= am33xx_hibernation_pre_snapshot,
+	.finish			= am33xx_hibernation_finish,
+	.prepare		= am33xx_hibernation_prepare,
+	.enter			= am33xx_hibernation_enter,
+	.leave			= am33xx_hibernation_leave,
+	.pre_restore		= am33xx_hibernation_pre_restore,
+	.restore_cleanup	= am33xx_hibernation_restore_cleanup,
+};
+#endif /* CONFIG_HIBERNATION */
+
 static void am33xx_txev_handler(void)
 {
 	switch (am33xx_pm->state) {
@@ -466,6 +539,11 @@ int __init am33xx_pm_init(void)
 	ret = am33xx_setup_deep_sleep();
 	if (ret < 0)
 		pr_err("AM33XX deep sleep modes unavailable\n");
+
+#ifdef CONFIG_HIBERNATION
+	if (pmx_dev)
+		hibernation_set_ops(&am33xx_hibernation_ops);
+#endif /* CONFIG_HIBERNATION */
 
 	return 0;
 }
