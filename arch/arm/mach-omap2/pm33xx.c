@@ -28,6 +28,8 @@
 #include <linux/interrupt.h>
 #include <linux/ti_emif.h>
 #include <linux/omap-mailbox.h>
+#include <linux/pinctrl/pinctrl.h>
+#include <linux/pinctrl/pinmux.h>
 
 #include <asm/suspend.h>
 #include <asm/proc-fns.h>
@@ -39,13 +41,14 @@
 #include "cm33xx.h"
 #include "pm33xx.h"
 #include "common.h"
+#include "control.h"
 #include "clockdomain.h"
 #include "powerdomain.h"
 #include "soc.h"
 #include "sram.h"
 
 static void __iomem *am33xx_emif_base;
-static struct powerdomain *cefuse_pwrdm, *gfx_pwrdm, *per_pwrdm, *mpu_pwrdm;
+static struct powerdomain *gfx_pwrdm, *per_pwrdm, *mpu_pwrdm;
 static struct clockdomain *gfx_l4ls_clkdm;
 static struct clockdomain *l3s_clkdm, *l4fw_clkdm;
 
@@ -54,10 +57,34 @@ static struct am33xx_pm_context *am33xx_pm;
 static DECLARE_COMPLETION(am33xx_pm_sync);
 
 static void (*am33xx_do_wfi_sram)(struct am33xx_suspend_params *);
+static struct pinctrl_dev *pmx_dev;
+static u32 gmii_sel;
 
 static struct am33xx_suspend_params susp_params;
 
 #ifdef CONFIG_SUSPEND
+static int am33xx_per_save_context(void)
+{
+	/*
+	 * Erratum 1.0.14 - 'GMII_SEL and CPSW Related Pad Control Registers:
+	 * Context of These Registers is Lost During Transitions of PD_PER'
+	 *
+	 * Save the padconf registers in the PER partition as well as the
+	 * GMII_SEL register
+	 */
+
+	gmii_sel = readl(AM33XX_CTRL_REGADDR(AM33XX_CONTROL_GMII_SEL_OFFSET));
+
+	return pinmux_save_context(pmx_dev, "am33xx_pmx_per");
+}
+
+static void am33xx_per_restore_context(void)
+{
+	/* Restore for Erratum 1.0.14 */
+	writel(gmii_sel, AM33XX_CTRL_REGADDR(AM33XX_CONTROL_GMII_SEL_OFFSET));
+
+	pinmux_restore_context(pmx_dev, "am33xx_pmx_per");
+}
 
 static int am33xx_do_sram_idle(long unsigned int unused)
 {
@@ -126,6 +153,16 @@ static int am33xx_pm_suspend(unsigned int state)
 	}
 
 	return ret;
+}
+
+static int am33xx_pm_prepare(void)
+{
+	return am33xx_per_save_context();
+}
+
+static void am33xx_pm_finish(void)
+{
+	am33xx_per_restore_context();
 }
 
 static int am33xx_pm_enter(suspend_state_t suspend_state)
@@ -228,6 +265,8 @@ static const struct platform_suspend_ops am33xx_pm_ops = {
 	.begin		= am33xx_pm_begin,
 	.end		= am33xx_pm_end,
 	.enter		= am33xx_pm_enter,
+	.prepare	= am33xx_pm_prepare,
+	.finish		= am33xx_pm_finish,
 	.valid		= am33xx_pm_valid,
 };
 #endif /* CONFIG_SUSPEND */
@@ -310,12 +349,14 @@ static int __init am33xx_map_emif(void)
 	return 0;
 }
 
-int __init am33xx_pm_init(void)
+int __init am33xx_setup_deep_sleep(void)
 {
-	int ret;
 	u32 temp;
 
-	if (!soc_is_am33xx())
+	if (!am33xx_emif_base)
+		return -ENODEV;
+
+	if (!pmx_dev)
 		return -ENODEV;
 
 	gfx_pwrdm = pwrdm_lookup("gfx_pwrdm");
@@ -327,25 +368,14 @@ int __init am33xx_pm_init(void)
 	l4fw_clkdm = clkdm_lookup("l4fw_clkdm");
 
 	if ((!gfx_pwrdm) || (!per_pwrdm) || (!mpu_pwrdm) || (!gfx_l4ls_clkdm) ||
-	    (!l3s_clkdm) || (!l4fw_clkdm)) {
-		ret = -ENODEV;
-		goto err;
-	}
+	    (!l3s_clkdm) || (!l4fw_clkdm))
+		return -ENODEV;
 
 	am33xx_pm = kzalloc(sizeof(*am33xx_pm), GFP_KERNEL);
 	if (!am33xx_pm) {
 		pr_err("Memory allocation failed\n");
-		ret = -ENOMEM;
-		return ret;
+		return -ENOMEM;
 	}
-
-	ret = am33xx_map_emif();
-	if (ret) {
-		pr_err("PM: Could not ioremap EMIF\n");
-		goto err;
-	}
-
-	am33xx_push_sram_idle();
 
 	/* Determine Memory Type */
 	temp = readl(am33xx_emif_base + EMIF_SDRAM_CONFIG);
@@ -355,15 +385,6 @@ int __init am33xx_pm_init(void)
 	susp_params.dram_sync = am33xx_dram_sync;
 	susp_params.mem_type = temp;
 	am33xx_pm->ipc.reg4 = temp;
-
-	(void) clkdm_for_each(omap_pm_clkdms_setup, NULL);
-
-	/* CEFUSE domain can be turned off post bootup */
-	cefuse_pwrdm = pwrdm_lookup("cefuse_pwrdm");
-	if (cefuse_pwrdm)
-		omap_set_pwrdm_state(cefuse_pwrdm, PWRDM_POWER_OFF);
-	else
-		pr_err("PM: Failed to get cefuse_pwrdm\n");
 
 	am33xx_pm->state = M3_STATE_RESET;
 
@@ -380,8 +401,38 @@ int __init am33xx_pm_init(void)
 		am33xx_do_wfi_sz + am33xx_resume_offset + 0x4);
 
 	return 0;
+}
 
-err:
-	kfree(am33xx_pm);
-	return ret;
+int __init am33xx_pm_init(void)
+{
+	static struct powerdomain *cefuse_pwrdm;
+	int ret;
+
+	if (!soc_is_am33xx())
+		return -ENODEV;
+
+	am33xx_push_sram_idle();
+
+	ret = am33xx_map_emif();
+	if (ret)
+		pr_err("PM: Could not ioremap EMIF\n");
+
+	(void) clkdm_for_each(omap_pm_clkdms_setup, NULL);
+
+	/* CEFUSE domain can be turned off post bootup */
+	cefuse_pwrdm = pwrdm_lookup("cefuse_pwrdm");
+	if (cefuse_pwrdm)
+		omap_set_pwrdm_state(cefuse_pwrdm, PWRDM_POWER_OFF);
+	else
+		pr_err("PM: Failed to get cefuse_pwrdm\n");
+
+	pmx_dev = get_pinctrl_dev_from_devname("44e10800.pinmux");
+	if (!pmx_dev)
+		pr_err("Could not find pin mux for saving context");
+
+	ret = am33xx_setup_deep_sleep();
+	if (ret < 0)
+		pr_err("AM33XX deep sleep modes unavailable\n");
+
+	return 0;
 }
