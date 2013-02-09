@@ -26,6 +26,8 @@
 #include <linux/module.h>
 #include <linux/mailbox.h>
 #include <linux/interrupt.h>
+#include <linux/pinctrl/pinctrl.h>
+#include <linux/pinctrl/pinmux.h>
 
 #include <asm/suspend.h>
 #include <asm/proc-fns.h>
@@ -47,14 +49,39 @@
 void (*am33xx_do_wfi_sram)(void);
 
 static void __iomem *am33xx_emif_base;
-static struct powerdomain *cefuse_pwrdm, *gfx_pwrdm, *per_pwrdm;
+static struct powerdomain *gfx_pwrdm, *per_pwrdm;
 static struct clockdomain *gfx_l4ls_clkdm;
 static struct omap_hwmod *usb_oh, *cpsw_oh, *tptc0_oh, *tptc1_oh, *tptc2_oh;
 static struct wkup_m3_context *wkup_m3;
+static struct pinctrl_dev *pmx_dev;
+static u32 gmii_sel;
 
 static DECLARE_COMPLETION(wkup_m3_sync);
 
 #ifdef CONFIG_SUSPEND
+static int am33xx_per_save_context(void)
+{
+	/*
+	 * Erratum 1.0.14 - 'GMII_SEL and CPSW Related Pad Control Registers:
+	 * Context of These Registers is Lost During Transitions of PD_PER'
+	 *
+	 * Save the padconf registers in the PER partition as well as the
+	 * GMII_SEL register
+	 */
+
+	gmii_sel = readl(AM33XX_CTRL_REGADDR(AM33XX_CONTROL_GMII_SEL_OFFSET));
+
+	return pinmux_save_context(pmx_dev, "am33xx_pmx_per");
+}
+
+static void am33xx_per_restore_context(void)
+{
+	/* Restore for Erratum 1.0.14 */
+	writel(gmii_sel, AM33XX_CTRL_REGADDR(AM33XX_CONTROL_GMII_SEL_OFFSET));
+
+	pinmux_restore_context(pmx_dev, "am33xx_pmx_per");
+}
+
 static int am33xx_do_sram_idle(long unsigned int unused)
 {
 	am33xx_do_wfi_sram();
@@ -138,6 +165,16 @@ static int am33xx_pm_suspend(void)
 	return ret;
 }
 
+static int am33xx_pm_prepare(void)
+{
+	return am33xx_per_save_context();
+}
+
+static void am33xx_pm_finish(void)
+{
+	am33xx_per_restore_context();
+}
+
 static int am33xx_pm_enter(suspend_state_t suspend_state)
 {
 	int ret = 0;
@@ -209,6 +246,8 @@ static const struct platform_suspend_ops am33xx_pm_ops = {
 	.begin		= am33xx_pm_begin,
 	.end		= am33xx_pm_end,
 	.enter		= am33xx_pm_enter,
+	.prepare	= am33xx_pm_prepare,
+	.finish		= am33xx_pm_finish,
 	.valid		= suspend_valid_only_mem,
 };
 
@@ -403,16 +442,15 @@ void __iomem *am33xx_get_emif_base(void)
 	return am33xx_emif_base;
 }
 
-int __init am33xx_pm_init(void)
+int __init am33xx_setup_deep_sleep(void)
 {
 	int ret;
 
-	if (!soc_is_am33xx())
+	if (!am33xx_get_emif_base())
 		return -ENODEV;
 
-	pr_info("Power Management for AM33XX family\n");
-
-	am33xx_push_sram_idle();
+	if (!pmx_dev)
+		return -ENODEV;
 
 	/*
 	 * By default the following IPs do not have MSTANDBY asserted
@@ -433,23 +471,41 @@ int __init am33xx_pm_init(void)
 
 	if ((!usb_oh) || (!tptc0_oh) || (!tptc1_oh) || (!tptc2_oh) ||
 		(!cpsw_oh) || (!gfx_pwrdm) || (!per_pwrdm) ||
-		(!gfx_l4ls_clkdm)) {
-		ret = -ENODEV;
-		goto err;
-	}
+		(!gfx_l4ls_clkdm))
+		return -ENODEV;
 
 	wkup_m3 = kzalloc(sizeof(struct wkup_m3_context), GFP_KERNEL);
 	if (!wkup_m3) {
 		pr_err("Memory allocation failed\n");
-		ret = -ENOMEM;
-		goto err;
+		return -ENOMEM;
 	}
 
-	ret = am33xx_map_emif();
+	wkup_m3->dev = omap_device_get_by_hwmod_name("wkup_m3");
+
+	ret = wkup_m3_init();
 	if (ret) {
-		pr_err("Could not ioremap EMIF\n");
-		goto err;
+		kfree(wkup_m3);
+		pr_err("Could not initialise firmware loading\n");
 	}
+
+	return ret;
+}
+
+int __init am33xx_pm_init(void)
+{
+	struct powerdomain *cefuse_pwrdm;
+	int ret;
+
+	if (!soc_is_am33xx())
+		return -ENODEV;
+
+	pr_info("Power Management for AM33XX family\n");
+
+	am33xx_push_sram_idle();
+
+	ret = am33xx_map_emif();
+	if (ret)
+		pr_err("Could not ioremap EMIF\n");
 
 	(void) clkdm_for_each(omap_pm_clkdms_setup, NULL);
 
@@ -460,12 +516,13 @@ int __init am33xx_pm_init(void)
 	else
 		pr_err("Failed to get cefuse_pwrdm\n");
 
-	wkup_m3->dev = omap_device_get_by_hwmod_name("wkup_m3");
+	pmx_dev = get_pinctrl_dev_from_devname("44e10800.pinmux");
+	if (!pmx_dev)
+		pr_err("Could not find pin mux for saving context");
 
-	ret = wkup_m3_init();
-	if (ret)
-		pr_err("Could not initialise firmware loading\n");
+	ret = am33xx_setup_deep_sleep();
+	if (ret < 0)
+		pr_err("AM33XX deep sleep modes unavailable\n");
 
-err:
-	return ret;
+	return 0;
 }
