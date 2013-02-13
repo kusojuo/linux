@@ -1360,12 +1360,14 @@ void omap2_gpio_prepare_for_idle(int pwr_mode)
 	struct gpio_bank *bank;
 
 	list_for_each_entry(bank, &omap_gpio_list, node) {
-		if (!bank->mod_usage)
-			continue;
+		if (bank->get_context_loss_count)
+			bank->context_loss_count =
+					bank->get_context_loss_count(bank->dev);
+		if (bank->mod_usage) {
+			bank->power_mode = pwr_mode;
 
-		bank->power_mode = pwr_mode;
-
-		pm_runtime_put_sync_suspend(bank->dev);
+			pm_runtime_put_sync_suspend(bank->dev);
+		}
 	}
 }
 
@@ -1374,10 +1376,14 @@ void omap2_gpio_resume_after_idle(void)
 	struct gpio_bank *bank;
 
 	list_for_each_entry(bank, &omap_gpio_list, node) {
-		if (!bank->mod_usage)
-			continue;
-
-		pm_runtime_get_sync(bank->dev);
+		if (bank->get_context_loss_count) {
+			int context_lost_cnt_after =
+				bank->get_context_loss_count(bank->dev);
+			if (context_lost_cnt_after != bank->context_loss_count)
+				omap_gpio_restore_context(bank);
+		}
+		if (bank->mod_usage)
+			pm_runtime_get_sync(bank->dev);
 	}
 }
 
