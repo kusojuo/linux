@@ -24,6 +24,7 @@
 #include <linux/slab.h>
 #include <linux/regmap.h>
 #include <linux/err.h>
+#include <linux/reboot.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
 
@@ -148,6 +149,79 @@ static struct regmap_config tps65217_regmap_config = {
 	.val_bits = 8,
 };
 
+/*
+ * If TPS65217_STATUS_OFF is cleared, the PWR_EN line can be used
+ * to enter/leave sleep states. Wait to set it until an actual power
+ * off occurs to retain that ability.
+ *
+ * In the case of hibernation, by the time the SYS_POWER_OFF notification
+ * has gone out, too many devices have been suspended to do the communication.
+ * Do it earlier instead.
+ */
+#ifdef CONFIG_HIBERNATION
+static int tps65217_poweroff(struct device *dev)
+{
+	struct tps65217 *tps = dev_get_drvdata(dev);
+	int ret = 0;
+
+	if (tps->write_status_off) {
+		dev_info(dev, "%s: Enabling STATUS_OFF\n", __func__);
+		ret = tps65217_set_bits(tps, TPS65217_REG_STATUS,
+				TPS65217_STATUS_OFF, TPS65217_STATUS_OFF,
+				TPS65217_PROTECT_NONE);
+		if (ret < 0)
+			dev_err(dev, "Failed to set status OFF\n");
+		tps->status_off_written = 1;
+	}
+
+	return ret;
+}
+
+static int tps65217_restore(struct device *dev)
+{
+	struct tps65217 *tps = dev_get_drvdata(dev);
+	int ret = 0;
+
+	dev_dbg(dev, "%s: Disabling STATUS_OFF\n", __func__);
+	ret = tps65217_clear_bits(tps, TPS65217_REG_STATUS,
+			TPS65217_STATUS_OFF, TPS65217_PROTECT_NONE);
+	if (ret < 0)
+		dev_err(dev, "Failed to clear status OFF\n");
+
+	tps->status_off_written = 0;
+
+	return ret;
+}
+static struct dev_pm_ops tps65217_pm_ops = {
+	.poweroff	= tps65217_poweroff,
+	.restore	= tps65217_restore,
+};
+#define TPS65217_PM_OPS (&tps65217_pm_ops)
+#else
+#define TPS65217_PM_OPS NULL
+#endif /* CONFIG_HIBERNATION */
+
+
+static int tps65217_reboot_handler(struct notifier_block *this,
+				   unsigned long code,
+				   void *unused)
+{
+	struct tps65217 *tps = container_of(this, struct tps65217,
+						reboot_notifier);
+
+	if (code == SYS_POWER_OFF && !tps->status_off_written) {
+		int ret;
+		dev_info(tps->dev, "%s: Enabling STATUS_OFF\n", __func__);
+		ret = tps65217_set_bits(tps, TPS65217_REG_STATUS,
+				TPS65217_STATUS_OFF, TPS65217_STATUS_OFF,
+				TPS65217_PROTECT_NONE);
+		if (ret < 0)
+			dev_err(tps->dev, "Failed to set status OFF\n");
+	}
+
+	return NOTIFY_OK;
+}
+
 static const struct of_device_id tps65217_of_match[] = {
 	{ .compatible = "ti,tps65217", .data = (void *)TPS65217 },
 	{ /* sentinel */ },
@@ -212,11 +286,13 @@ static int tps65217_probe(struct i2c_client *client,
 
 	/* Set the PMIC to shutdown on PWR_EN toggle */
 	if (status_off) {
-		ret = tps65217_set_bits(tps, TPS65217_REG_STATUS,
-				TPS65217_STATUS_OFF, TPS65217_STATUS_OFF,
-				TPS65217_PROTECT_NONE);
-		if (ret)
-			dev_warn(tps->dev, "unable to set the status OFF\n");
+		tps->write_status_off = 1;
+		tps->reboot_notifier.notifier_call = tps65217_reboot_handler;
+		ret = register_reboot_notifier(&tps->reboot_notifier);
+		if (ret < 0) {
+			dev_err(tps->dev, "Failed to register reboot handler\n");
+			return ret;
+		}
 	}
 
 	dev_info(tps->dev, "TPS65217 ID %#x version 1.%d\n",
@@ -229,6 +305,9 @@ static int tps65217_probe(struct i2c_client *client,
 static int tps65217_remove(struct i2c_client *client)
 {
 	struct tps65217 *tps = i2c_get_clientdata(client);
+
+	if (tps->write_status_off)
+		unregister_reboot_notifier(&tps->reboot_notifier);
 
 	mfd_remove_devices(tps->dev);
 
@@ -246,6 +325,7 @@ static struct i2c_driver tps65217_driver = {
 		.name	= "tps65217",
 		.owner	= THIS_MODULE,
 		.of_match_table = of_match_ptr(tps65217_of_match),
+		.pm	= TPS65217_PM_OPS,
 	},
 	.id_table	= tps65217_id_table,
 	.probe		= tps65217_probe,
