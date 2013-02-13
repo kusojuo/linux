@@ -1624,6 +1624,7 @@ static int init_header_complete(struct swsusp_info *info)
 {
 	memcpy(&info->uts, init_utsname(), sizeof(struct new_utsname));
 	info->version_code = LINUX_VERSION_CODE;
+	swsusp_arch_add_info(info->archdata, sizeof(info->archdata));
 	return 0;
 }
 
@@ -1642,6 +1643,8 @@ static char *check_image_kernel(struct swsusp_info *info)
 	return NULL;
 }
 #endif /* CONFIG_ARCH_HIBERNATION_HEADER */
+
+void __weak swsusp_arch_add_info(char *archdata, size_t size) {}
 
 unsigned long snapshot_get_image_size(void)
 {
