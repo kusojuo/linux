@@ -25,6 +25,16 @@
 
 extern const void __nosave_begin, __nosave_end;
 extern void cpu_resume(void);
+extern void cpu_resume_restore_nosave(void);
+
+u32 __nosave_backup_phys;
+u32 __nosave_begin_phys;
+u32 __nosave_end_phys;
+
+void swsusp_arch_add_info(char *archdata, size_t size)
+{
+	*(u32 *) archdata = virt_to_phys(cpu_resume_restore_nosave);
+}
 
 int pfn_is_nosave(unsigned long pfn)
 {
@@ -107,3 +117,23 @@ int __naked swsusp_arch_resume(void)
 		__swsusp_resume_stk + sizeof(__swsusp_resume_stk));
 	return 0;
 }
+
+static int __init swsusp_arch_init(void)
+{
+	char *backup;
+	size_t len;
+
+	len = &__nosave_end - &__nosave_begin;
+	backup = kmalloc(len, GFP_KERNEL);
+	if (backup) {
+		pr_info("%s: Backed up %d byte nosave region\n", __func__, len);
+		memcpy(backup, &__nosave_begin, len);
+	}
+
+	__nosave_backup_phys = virt_to_phys(backup);
+	__nosave_begin_phys = virt_to_phys(&__nosave_begin);
+	__nosave_end_phys = virt_to_phys(&__nosave_end);
+
+	return 0;
+}
+late_initcall(swsusp_arch_init);
