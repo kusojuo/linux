@@ -1359,6 +1359,8 @@ static void omap_serial_fill_features_erratas(struct uart_omap_port *up)
 	}
 }
 
+extern int omap_pm_get_dev_context_loss_count(struct device *dev);
+
 static struct omap_uart_port_info *of_get_uart_port_info(struct device *dev)
 {
 	struct omap_uart_port_info *omap_up_info;
@@ -1367,6 +1369,7 @@ static struct omap_uart_port_info *of_get_uart_port_info(struct device *dev)
 	if (!omap_up_info)
 		return NULL; /* out of memory */
 
+	omap_up_info->get_context_loss_count = omap_pm_get_dev_context_loss_count;
 	of_property_read_u32(dev->of_node, "clock-frequency",
 					 &omap_up_info->uartclk);
 	return omap_up_info;

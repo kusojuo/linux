@@ -1759,6 +1759,8 @@ static inline struct omap_mmc_platform_data
 }
 #endif
 
+extern int omap_pm_get_dev_context_loss_count(struct device *dev);
+
 static int omap_hsmmc_probe(struct platform_device *pdev)
 {
 	struct omap_mmc_platform_data *pdata = pdev->dev.platform_data;
@@ -1775,6 +1777,7 @@ static int omap_hsmmc_probe(struct platform_device *pdev)
 	match = of_match_device(of_match_ptr(omap_mmc_of_match), &pdev->dev);
 	if (match) {
 		pdata = of_get_hsmmc_pdata(&pdev->dev);
+		pdata->get_context_loss_count = omap_pm_get_dev_context_loss_count;
 		if (match->data) {
 			const u16 *offsetp = match->data;
 			pdata->reg_offset = *offsetp;

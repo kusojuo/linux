@@ -1473,22 +1473,27 @@ static struct omap_gpio_reg_offs omap4_gpio_regs = {
 	.fallingdetect =	OMAP4_GPIO_FALLINGDETECT,
 };
 
+int omap_pm_get_dev_context_loss_count(struct device *dev);
+
 const static struct omap_gpio_platform_data omap2_pdata = {
 	.regs = &omap2_gpio_regs,
 	.bank_width = 32,
 	.dbck_flag = false,
+	.get_context_loss_count = omap_pm_get_dev_context_loss_count,
 };
 
 const static struct omap_gpio_platform_data omap3_pdata = {
 	.regs = &omap2_gpio_regs,
 	.bank_width = 32,
 	.dbck_flag = true,
+	.get_context_loss_count = omap_pm_get_dev_context_loss_count,
 };
 
 const static struct omap_gpio_platform_data omap4_pdata = {
 	.regs = &omap4_gpio_regs,
 	.bank_width = 32,
 	.dbck_flag = true,
+	.get_context_loss_count = omap_pm_get_dev_context_loss_count,
 };
 
 static const struct of_device_id omap_gpio_match[] = {
