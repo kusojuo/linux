@@ -112,6 +112,7 @@
 #define	OMAP_RTC_HAS_IRQWAKEEN		0x2
 
 static void __iomem	*rtc_base;
+static bool omap_rtc_has_kicker;
 
 #define rtc_read(addr)		readb(rtc_base + (addr))
 #define rtc_write(val, addr)	writeb(val, rtc_base + (addr))
@@ -375,6 +376,7 @@ static int __init omap_rtc_probe(struct platform_device *pdev)
 
 	id_entry = platform_get_device_id(pdev);
 	if (id_entry && (id_entry->driver_data & OMAP_RTC_HAS_KICKER)) {
+		omap_rtc_has_kicker = true;
 		rtc_writel(KICK0_VALUE, OMAP_RTC_KICK0_REG);
 		rtc_writel(KICK1_VALUE, OMAP_RTC_KICK1_REG);
 	}
@@ -511,9 +513,6 @@ static int omap_rtc_suspend(struct device *dev)
 		rtc_write(0, OMAP_RTC_INTERRUPTS_REG);
 	}
 
-	/* Disable the clock/module */
-	pm_runtime_put_sync(dev);
-
 	return 0;
 }
 
@@ -540,9 +539,78 @@ static int omap_rtc_resume(struct device *dev)
 	}
 	return 0;
 }
-#endif
 
-static SIMPLE_DEV_PM_OPS(omap_rtc_pm_ops, omap_rtc_suspend, omap_rtc_resume);
+static int omap_rtc_freeze(struct device *dev)
+{
+	irqstat = rtc_read(OMAP_RTC_INTERRUPTS_REG);
+	rtc_write(0, OMAP_RTC_INTERRUPTS_REG);
+	return 0;
+}
+
+static int omap_rtc_thaw(struct device *dev)
+{
+	rtc_write(irqstat, OMAP_RTC_INTERRUPTS_REG);
+	return 0;
+}
+
+static int omap_rtc_restore_noirq(struct device *dev)
+{
+	u8 reg, new_ctrl;
+
+	if (omap_rtc_has_kicker) {
+		rtc_writel(KICK0_VALUE, OMAP_RTC_KICK0_REG);
+		rtc_writel(KICK1_VALUE, OMAP_RTC_KICK1_REG);
+	}
+
+	/* turn off interrupts */
+	rtc_write(0, OMAP_RTC_INTERRUPTS_REG);
+
+	/* clear any status */
+	reg = rtc_read(OMAP_RTC_STATUS_REG);
+	rtc_write(reg, OMAP_RTC_STATUS_REG);
+
+	reg = rtc_read(OMAP_RTC_CTRL_REG);
+
+	/* force to 24 hour mode */
+	new_ctrl = reg & (OMAP_RTC_CTRL_SPLIT|OMAP_RTC_CTRL_AUTO_COMP);
+
+	/* Make sure the clock is running */
+	new_ctrl |= OMAP_RTC_CTRL_STOP;
+
+	if (reg != new_ctrl)
+		rtc_write(new_ctrl, OMAP_RTC_CTRL_REG);
+	return 0;
+}
+
+static int omap_rtc_suspend_late(struct device *dev)
+{
+	pm_runtime_put_sync(dev);
+	return 0;
+}
+
+static int omap_rtc_resume_early(struct device *dev)
+{
+	pm_runtime_get_sync(dev);
+	return 0;
+}
+
+static struct dev_pm_ops omap_rtc_pm_ops = {
+	.suspend =	omap_rtc_suspend,
+	.suspend_late = omap_rtc_suspend_late,
+	.resume_early = omap_rtc_resume_early,
+	.resume =	omap_rtc_resume,
+	.freeze =	omap_rtc_freeze,
+	.freeze_late =	omap_rtc_suspend_late,
+	.thaw_early =	omap_rtc_resume_early,
+	.thaw =		omap_rtc_thaw,
+	.restore_early = omap_rtc_resume_early,
+	.restore_noirq = omap_rtc_restore_noirq,
+	.restore =	omap_rtc_thaw,
+};
+#define OMAP_RTC_PM_OPS (&omap_rtc_pm_ops)
+#else
+#define OMAP_RTC_PM_OPS NULL
+#endif
 
 static void omap_rtc_shutdown(struct platform_device *pdev)
 {
@@ -556,7 +624,7 @@ static struct platform_driver omap_rtc_driver = {
 	.driver		= {
 		.name	= DRIVER_NAME,
 		.owner	= THIS_MODULE,
-		.pm	= &omap_rtc_pm_ops,
+		.pm	= OMAP_RTC_PM_OPS,
 		.of_match_table = of_match_ptr(omap_rtc_of_match),
 	},
 	.id_table	= omap_rtc_devtype,
