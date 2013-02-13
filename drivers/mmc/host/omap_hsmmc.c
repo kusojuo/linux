@@ -601,9 +601,6 @@ static int omap_hsmmc_context_restore(struct omap_hsmmc_host *host)
 	u32 hctl, capa;
 	unsigned long timeout;
 
-	if (!OMAP_HSMMC_READ(host->base, SYSSTATUS) & RESETDONE)
-		return 1;
-
 	if (host->hctl == OMAP_HSMMC_READ(host->base, HCTL) &&
 	    host->capa == OMAP_HSMMC_READ(host->base, CAPA))
 		return 0;
@@ -2190,12 +2187,11 @@ static int omap_hsmmc_runtime_resume(struct device *dev)
 }
 
 static struct dev_pm_ops omap_hsmmc_dev_pm_ops = {
-	.suspend	= omap_hsmmc_suspend,
-	.resume		= omap_hsmmc_resume,
+	SET_SYSTEM_SLEEP_PM_OPS(omap_hsmmc_suspend, omap_hsmmc_resume)
+	SET_RUNTIME_PM_OPS(omap_hsmmc_runtime_suspend,
+		omap_hsmmc_runtime_resume, NULL)
 	.prepare	= omap_hsmmc_prepare,
 	.complete	= omap_hsmmc_complete,
-	.runtime_suspend = omap_hsmmc_runtime_suspend,
-	.runtime_resume = omap_hsmmc_runtime_resume,
 };
 
 static struct platform_driver omap_hsmmc_driver = {
