@@ -103,6 +103,7 @@
 #define	OMAP_RTC_HAS_KICKER		0x1
 
 static void __iomem	*rtc_base;
+static bool omap_rtc_has_kicker;
 
 #define rtc_read(addr)		readb(rtc_base + (addr))
 #define rtc_write(val, addr)	writeb(val, rtc_base + (addr))
@@ -371,6 +372,7 @@ static int __init omap_rtc_probe(struct platform_device *pdev)
 
 	id_entry = platform_get_device_id(pdev);
 	if (id_entry && (id_entry->driver_data & OMAP_RTC_HAS_KICKER)) {
+		omap_rtc_has_kicker = true;
 		rtc_writel(KICK0_VALUE, OMAP_RTC_KICK0_REG);
 		rtc_writel(KICK1_VALUE, OMAP_RTC_KICK1_REG);
 	}
@@ -495,7 +497,7 @@ static int __exit omap_rtc_remove(struct platform_device *pdev)
 
 static u8 irqstat;
 
-static int omap_rtc_suspend(struct platform_device *pdev, pm_message_t state)
+static int omap_rtc_suspend(struct device *dev)
 {
 	irqstat = rtc_read(OMAP_RTC_INTERRUPTS_REG);
 
@@ -503,32 +505,81 @@ static int omap_rtc_suspend(struct platform_device *pdev, pm_message_t state)
 	 * source, and in fact this enable() call is just saving a flag
 	 * that's never used...
 	 */
-	if (device_may_wakeup(&pdev->dev))
+	if (device_may_wakeup(dev))
 		enable_irq_wake(omap_rtc_alarm);
 	else
 		rtc_write(0, OMAP_RTC_INTERRUPTS_REG);
 
-	/* Disable the clock/module */
-	pm_runtime_put_sync(&pdev->dev);
-
 	return 0;
 }
 
-static int omap_rtc_resume(struct platform_device *pdev)
+static int omap_rtc_resume(struct device *dev)
 {
-	/* Enable the clock/module so that we can access the registers */
-	pm_runtime_get_sync(&pdev->dev);
-
-	if (device_may_wakeup(&pdev->dev))
+	if (device_may_wakeup(dev))
 		disable_irq_wake(omap_rtc_alarm);
 	else
 		rtc_write(irqstat, OMAP_RTC_INTERRUPTS_REG);
 	return 0;
 }
 
+static int omap_rtc_freeze(struct device *dev)
+{
+	irqstat = rtc_read(OMAP_RTC_INTERRUPTS_REG);
+	rtc_write(0, OMAP_RTC_INTERRUPTS_REG);
+	return 0;
+}
+
+static int omap_rtc_thaw(struct device *dev)
+{
+	rtc_write(irqstat, OMAP_RTC_INTERRUPTS_REG);
+	return 0;
+}
+
+static int omap_rtc_restore_noirq(struct device *dev)
+{
+	u8 reg, new_ctrl;
+
+	if (omap_rtc_has_kicker) {
+		rtc_writel(KICK0_VALUE, OMAP_RTC_KICK0_REG);
+		rtc_writel(KICK1_VALUE, OMAP_RTC_KICK1_REG);
+	}
+
+	/* turn off interrupts */
+	rtc_write(0, OMAP_RTC_INTERRUPTS_REG);
+
+	/* clear any status */
+	reg = rtc_read(OMAP_RTC_STATUS_REG);
+	rtc_write(reg, OMAP_RTC_STATUS_REG);
+
+	reg = rtc_read(OMAP_RTC_CTRL_REG);
+
+	/* force to 24 hour mode */
+	new_ctrl = reg & (OMAP_RTC_CTRL_SPLIT|OMAP_RTC_CTRL_AUTO_COMP);
+
+	/* Make sure the clock is running */
+	new_ctrl |= OMAP_RTC_CTRL_STOP;
+
+	if (reg != new_ctrl)
+		rtc_write(new_ctrl, OMAP_RTC_CTRL_REG);
+	return 0;
+}
+
+static struct dev_pm_ops omap_rtc_pm_ops = {
+	.suspend =	omap_rtc_suspend,
+	.suspend_late = pm_runtime_put_sync,
+	.resume_early = pm_runtime_get_sync,
+	.resume =	omap_rtc_resume,
+	.freeze =	omap_rtc_freeze,
+	.freeze_late =	pm_runtime_put_sync,
+	.thaw_early = 	pm_runtime_get_sync,
+	.thaw =		omap_rtc_thaw,
+	.restore_early = pm_runtime_get_sync,
+	.restore_noirq = omap_rtc_restore_noirq,
+	.restore =	omap_rtc_thaw,
+};
+#define OMAP_RTC_PM_OPS (&omap_rtc_pm_ops)
 #else
-#define omap_rtc_suspend NULL
-#define omap_rtc_resume  NULL
+#define OMAP_RTC_PM_OPS NULL
 #endif
 
 static void omap_rtc_shutdown(struct platform_device *pdev)
@@ -539,13 +590,12 @@ static void omap_rtc_shutdown(struct platform_device *pdev)
 MODULE_ALIAS("platform:omap_rtc");
 static struct platform_driver omap_rtc_driver = {
 	.remove		= __exit_p(omap_rtc_remove),
-	.suspend	= omap_rtc_suspend,
-	.resume		= omap_rtc_resume,
 	.shutdown	= omap_rtc_shutdown,
 	.driver		= {
 		.name	= DRIVER_NAME,
 		.owner	= THIS_MODULE,
 		.of_match_table = of_match_ptr(omap_rtc_of_match),
+		.pm	= OMAP_RTC_PM_OPS,
 	},
 	.id_table	= omap_rtc_devtype,
 };
