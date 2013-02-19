@@ -147,6 +147,8 @@ struct ti_tscadc_dev {
 
 	/* adc device */
 	struct adc_device *adc;
+
+	unsigned int clkdiv;
 };
 
 #endif

@@ -103,6 +103,8 @@ static struct clk dpll_core_ck;
 static const struct clk_ops dpll_core_ck_ops = {
 	.recalc_rate	= &omap3_dpll_recalc,
 	.get_parent	= &omap2_init_dpll_parent,
+	.save_context	= &omap3_core_dpll_save_context,
+	.restore_context = &omap3_core_dpll_restore_context,
 };
 
 static struct clk_hw_omap dpll_core_ck_hw = {
@@ -180,6 +182,8 @@ static const struct clk_ops dpll_mpu_ck_ops = {
 	.round_rate	= &omap2_dpll_round_rate,
 	.set_rate	= &omap3_noncore_dpll_set_rate,
 	.get_parent	= &omap2_init_dpll_parent,
+	.save_context	= &omap3_noncore_dpll_save_context,
+	.restore_context = &omap3_noncore_dpll_restore_context,
 };
 
 static struct clk_hw_omap dpll_mpu_ck_hw = {
@@ -225,6 +229,8 @@ static const struct clk_ops dpll_ddr_ck_ops = {
 	.get_parent	= &omap2_init_dpll_parent,
 	.round_rate	= &omap2_dpll_round_rate,
 	.set_rate	= &omap3_noncore_dpll_set_rate,
+	.save_context	= &omap3_noncore_dpll_save_context,
+	.restore_context = &omap3_noncore_dpll_restore_context,
 };
 
 static struct clk_hw_omap dpll_ddr_ck_hw = {
@@ -480,6 +486,8 @@ static const struct clk_ops timer1_fck_ops = {
 	.get_parent	= &omap2_clksel_find_parent_index,
 	.set_parent	= &omap2_clksel_set_parent,
 	.init		= &omap2_init_clk_clkdm,
+	.save_context	= &omap2_dflt_clk_save_context,
+	.restore_context = &omap2_dflt_clk_restore_context,
 };
 
 static struct clk_hw_omap timer1_fck_hw = {
@@ -599,6 +607,8 @@ static const struct clk_ops cpsw_fck_ops = {
 	.recalc_rate	= &omap2_clksel_recalc,
 	.get_parent	= &omap2_clksel_find_parent_index,
 	.set_parent	= &omap2_clksel_set_parent,
+	.save_context	= &omap2_clksel_save_context,
+	.restore_context = &omap2_clksel_restore_context,
 };
 
 static const struct clksel cpsw_cpts_rft_clkmux_sel[] = {
@@ -643,6 +653,8 @@ static const struct clk_ops gpio_fck_ops = {
 	.get_parent	= &omap2_clksel_find_parent_index,
 	.set_parent	= &omap2_clksel_set_parent,
 	.init		= &omap2_init_clk_clkdm,
+	.save_context	= &omap2_clksel_save_context,
+	.restore_context = &omap2_clksel_restore_context,
 };
 
 static struct clk gpio0_dbclk_mux_ck;

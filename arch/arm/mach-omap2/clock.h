@@ -337,6 +337,7 @@ struct clk_hw_omap {
 	const char		*clkdm_name;
 	struct clockdomain	*clkdm;
 	const struct clk_hw_omap_ops	*ops;
+	u32			context;
 };
 
 struct clk_hw_omap_ops {
@@ -489,5 +490,17 @@ extern int am33xx_clk_init(void);
 
 extern int omap2_clkops_enable_clkdm(struct clk_hw *hw);
 extern void omap2_clkops_disable_clkdm(struct clk_hw *hw);
+
+extern int omap2_dflt_clk_save_context(struct clk_hw *hw);
+extern void omap2_dflt_clk_restore_context(struct clk_hw *hw);
+
+extern int omap2_clksel_save_context(struct clk_hw *hw);
+extern void omap2_clksel_restore_context(struct clk_hw *hw);
+
+extern int omap3_noncore_dpll_save_context(struct clk_hw *hw);
+extern void omap3_noncore_dpll_restore_context(struct clk_hw *hw);
+
+extern int omap3_core_dpll_save_context(struct clk_hw *hw);
+extern void omap3_core_dpll_restore_context(struct clk_hw *hw);
 
 #endif

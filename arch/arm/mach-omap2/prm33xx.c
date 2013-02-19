@@ -320,6 +320,24 @@ static int am33xx_pwrdm_wait_transition(struct powerdomain *pwrdm)
 	return 0;
 }
 
+static void am33xx_pwrdm_save_context(struct powerdomain *pwrdm)
+{
+	pwrdm->context = am33xx_prm_read_reg(pwrdm->prcm_offs,
+						pwrdm->pwrstctrl_offs);
+	/*
+	 * Do not save LOWPOWERSTATECHANGE, writing a 1 indicates a request,
+	 * reading back a 1 indicates a request in progress.
+	 */
+	pwrdm->context &= ~AM33XX_LOWPOWERSTATECHANGE_MASK;
+}
+
+static void am33xx_pwrdm_restore_context(struct powerdomain *pwrdm)
+{
+	am33xx_prm_write_reg(pwrdm->context, pwrdm->prcm_offs,
+						pwrdm->pwrstctrl_offs);
+	am33xx_pwrdm_wait_transition(pwrdm);
+}
+
 struct pwrdm_ops am33xx_pwrdm_operations = {
 	.pwrdm_set_next_pwrst		= am33xx_pwrdm_set_next_pwrst,
 	.pwrdm_read_next_pwrst		= am33xx_pwrdm_read_next_pwrst,
@@ -335,4 +353,6 @@ struct pwrdm_ops am33xx_pwrdm_operations = {
 	.pwrdm_set_mem_onst		= am33xx_pwrdm_set_mem_onst,
 	.pwrdm_set_mem_retst		= am33xx_pwrdm_set_mem_retst,
 	.pwrdm_wait_transition		= am33xx_pwrdm_wait_transition,
+	.pwrdm_save_context		= am33xx_pwrdm_save_context,
+	.pwrdm_restore_context		= am33xx_pwrdm_restore_context,
 };

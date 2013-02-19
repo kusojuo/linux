@@ -365,6 +365,31 @@ void omap2_dflt_clk_disable(struct clk_hw *hw)
 		clkdm_clk_disable(clk->clkdm, hw->clk);
 }
 
+int omap2_dflt_clk_save_context(struct clk_hw *hw)
+{
+	struct clk_hw_omap *clk;
+	int ret = 0;
+
+	clk = to_clk_hw_omap(hw);
+	if (clk->clksel_reg)
+		ret = omap2_clksel_save_context(hw);
+
+	return ret;
+}
+
+void omap2_dflt_clk_restore_context(struct clk_hw *hw)
+{
+	struct clk_hw_omap *clk;
+
+	clk = to_clk_hw_omap(hw);
+
+	if (clk->clksel_reg)
+		omap2_clksel_restore_context(hw);
+
+	if (clk->enable_reg)
+		clk_dflt_restore_context(hw);
+}
+
 /**
  * omap2_clkops_enable_clkdm - increment usecount on clkdm of @hw
  * @hw: struct clk_hw * of the clock being enabled

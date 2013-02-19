@@ -22,7 +22,7 @@
 struct wkup_m3_context {
 	struct am33xx_ipc_data	ipc_data;
 	struct device		*dev;
-	struct firmware		*firmware;
+	const struct firmware	*firmware;
 	struct mailbox		*mbox;
 	void __iomem		*code;
 	u8			state;

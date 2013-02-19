@@ -70,7 +70,6 @@ struct gpio_bank {
 	struct device *dev;
 	bool is_mpuio;
 	bool dbck_flag;
-	bool loses_context;
 	int stride;
 	u32 width;
 	int context_loss_count;
@@ -1124,7 +1123,6 @@ static int omap_gpio_probe(struct platform_device *pdev)
 	bank->width = pdata->bank_width;
 	bank->is_mpuio = pdata->is_mpuio;
 	bank->non_wakeup_gpios = pdata->non_wakeup_gpios;
-	bank->loses_context = pdata->loses_context;
 	bank->regs = pdata->regs;
 #ifdef CONFIG_OF_GPIO
 	bank->chip.of_node = of_node_get(node);
@@ -1178,8 +1176,7 @@ static int omap_gpio_probe(struct platform_device *pdev)
 	omap_gpio_chip_init(bank);
 	omap_gpio_show_rev(bank);
 
-	if (bank->loses_context)
-		bank->get_context_loss_count = pdata->get_context_loss_count;
+	bank->get_context_loss_count = pdata->get_context_loss_count;
 
 	pm_runtime_put(bank->dev);
 
@@ -1363,12 +1360,14 @@ void omap2_gpio_prepare_for_idle(int pwr_mode)
 	struct gpio_bank *bank;
 
 	list_for_each_entry(bank, &omap_gpio_list, node) {
-		if (!bank->mod_usage || !bank->loses_context)
-			continue;
+		if (bank->get_context_loss_count)
+			bank->context_loss_count =
+					bank->get_context_loss_count(bank->dev);
+		if (bank->mod_usage) {
+			bank->power_mode = pwr_mode;
 
-		bank->power_mode = pwr_mode;
-
-		pm_runtime_put_sync_suspend(bank->dev);
+			pm_runtime_put_sync_suspend(bank->dev);
+		}
 	}
 }
 
@@ -1377,10 +1376,14 @@ void omap2_gpio_resume_after_idle(void)
 	struct gpio_bank *bank;
 
 	list_for_each_entry(bank, &omap_gpio_list, node) {
-		if (!bank->mod_usage || !bank->loses_context)
-			continue;
-
-		pm_runtime_get_sync(bank->dev);
+		if (bank->get_context_loss_count) {
+			int context_lost_cnt_after =
+				bank->get_context_loss_count(bank->dev);
+			if (context_lost_cnt_after != bank->context_loss_count)
+				omap_gpio_restore_context(bank);
+		}
+		if (bank->mod_usage)
+			pm_runtime_get_sync(bank->dev);
 	}
 }
 
@@ -1476,22 +1479,27 @@ static struct omap_gpio_reg_offs omap4_gpio_regs = {
 	.fallingdetect =	OMAP4_GPIO_FALLINGDETECT,
 };
 
+int omap_pm_get_dev_context_loss_count(struct device *dev);
+
 const static struct omap_gpio_platform_data omap2_pdata = {
 	.regs = &omap2_gpio_regs,
 	.bank_width = 32,
 	.dbck_flag = false,
+	.get_context_loss_count = omap_pm_get_dev_context_loss_count,
 };
 
 const static struct omap_gpio_platform_data omap3_pdata = {
 	.regs = &omap2_gpio_regs,
 	.bank_width = 32,
 	.dbck_flag = true,
+	.get_context_loss_count = omap_pm_get_dev_context_loss_count,
 };
 
 const static struct omap_gpio_platform_data omap4_pdata = {
 	.regs = &omap4_gpio_regs,
 	.bank_width = 32,
 	.dbck_flag = true,
+	.get_context_loss_count = omap_pm_get_dev_context_loss_count,
 };
 
 static const struct of_device_id omap_gpio_match[] = {

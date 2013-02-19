@@ -464,3 +464,22 @@ int omap2_clksel_set_parent(struct clk_hw *hw, u8 field_val)
 	_write_clksel_reg(clk, field_val);
 	return 0;
 }
+
+int omap2_clksel_save_context(struct clk_hw *hw)
+{
+	struct clk_hw_omap *clk = to_clk_hw_omap(hw);
+	u32 v;
+
+	v = readl(clk->clksel_reg);
+	v &= clk->clksel_mask;
+	clk->context = v >> __ffs(clk->clksel_mask);
+
+	return 0;
+}
+
+void omap2_clksel_restore_context(struct clk_hw *hw)
+{
+	struct clk_hw_omap *clk = to_clk_hw_omap(hw);
+
+	_write_clksel_reg(clk, clk->context);
+}
