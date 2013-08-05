@@ -1124,6 +1124,8 @@ void edma_link(unsigned from, unsigned to)
 	ctlr_to = EDMA_CTLR(to);
 	to = EDMA_CHAN_SLOT(to);
 
+	pr_debug("Setting up link %d -> %d\n", from, to);
+
 	if (from >= edma_cc[ctlr_from]->num_slots)
 		return;
 	if (to >= edma_cc[ctlr_to]->num_slots)
