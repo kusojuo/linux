@@ -48,7 +48,7 @@
 
 /* Max of 16 segments per channel to conserve PaRAM slots */
 #define MAX_NR_SG		16
-#define EDMA_MAX_SLOTS		MAX_NR_SG
+#define EDMA_MAX_SLOTS		(MAX_NR_SG+1)
 #define EDMA_DESCRIPTORS	16
 
 struct edma_desc {
@@ -310,6 +310,9 @@ static struct dma_async_tx_descriptor *edma_prep_slave_sg(
 	/* Allocate a PaRAM slot, if needed */
 
 	num_slots_needed = sg_len > MAX_NR_SG ? MAX_NR_SG : sg_len;
+
+	/* Allocate one extra to account for the channel itself */
+	num_slots_needed++;
 
 	for (i = 0; i < num_slots_needed; i++) {
 		if (echan->slot[i] < 0) {
