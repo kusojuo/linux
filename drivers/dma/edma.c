@@ -354,6 +354,9 @@ static struct dma_async_tx_descriptor *edma_prep_slave_sg(
 	int src_bidx, dst_bidx, src_cidx, dst_cidx;
 	int i, num_slots_needed;
 
+	if (MAX_NR_SG & 1)
+		dev_err(dev, "%s: MAX_NR_SG must be even\n", __func__);
+
 	if (unlikely(!echan || !sgl || !sg_len))
 		return NULL;
 
