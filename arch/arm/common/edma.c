@@ -1094,6 +1094,21 @@ void edma_set_transfer_params(unsigned slot,
 EXPORT_SYMBOL(edma_set_transfer_params);
 
 /**
+ * edma_enable_interrupt - enable interrupt on parameter RAM slot
+ * @slot: parameter RAM slot which is the link target
+ *
+ * The originating slot should not be part of any active DMA transfer.
+ */
+void edma_enable_interrupt(unsigned slot)
+{
+	pr_debug("Enabling interrupt on slot %d\n", slot);
+
+	edma_parm_modify(EDMA_CTLR(slot), PARM_OPT, EDMA_CHAN_SLOT(slot),
+			 ~TCINTEN, TCINTEN);
+}
+EXPORT_SYMBOL(edma_enable_interrupt);
+
+/**
  * edma_link - link one parameter RAM slot to another
  * @from: parameter RAM slot originating the link
  * @to: parameter RAM slot which is the link target
