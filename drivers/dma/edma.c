@@ -168,6 +168,9 @@ static void edma_execute(struct edma_chan *echan)
 	total_left = edesc->pset_nr - edesc->total_processed;
 	total_link_set = total_left > MAX_NR_LS ? MAX_NR_LS : total_left;
 
+	if (!total_left)
+		return;
+
 	/* First time, setup 2 cyclically linked sets, each containing half
 	   the slots allocated for this channel */
 	if (edesc->total_processed == 0) {
