@@ -102,6 +102,37 @@ static void edma_desc_free(struct virt_dma_desc *vdesc)
 	kfree(container_of(vdesc, struct edma_desc, vdesc));
 }
 
+static inline void dump_pset(struct edma_chan *echan, int slot,
+		     struct edmacc_param *pset_unused, int pset_idx)
+{
+	struct edmacc_param pset_local, *pset;
+	pset = &pset_local;
+
+	edma_read_slot(slot, pset);
+
+	dev_dbg(echan->vchan.chan.device->dev,
+		"\n pset[%d]:\n"
+		"  chnum\t%d\n"
+		"  slot\t%d\n"
+		"  opt\t%08x\n"
+		"  src\t%08x\n"
+		"  dst\t%08x\n"
+		"  abcnt\t%08x\n"
+		"  ccnt\t%08x\n"
+		"  bidx\t%08x\n"
+		"  cidx\t%08x\n"
+		"  lkrld\t%08x\n",
+		pset_idx, echan->ch_num, slot,
+		pset[0].opt,
+		pset[0].src,
+		pset[0].dst,
+		pset[0].a_b_cnt,
+		pset[0].ccnt,
+		pset[0].src_dst_bidx,
+		pset[0].src_dst_cidx,
+		pset[0].link_bcntrld);
+}
+
 /* Dispatch a queued descriptor to the controller (caller holds lock) */
 static void edma_execute(struct edma_chan *echan)
 {
