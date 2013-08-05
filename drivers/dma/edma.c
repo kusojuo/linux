@@ -59,6 +59,10 @@ struct edma_desc {
 	int				pset_nr;
 	int				total_processed;
 	int				next_setup_linkset;
+
+	int				no_first_ls_ack;
+	int				pending_acks;
+
 	struct edmacc_param		pset[0];
 };
 
@@ -147,8 +151,7 @@ static void edma_execute(struct edma_chan *echan)
 	struct edmacc_param tmp_param;
 
 	/* If either we processed all psets or we're still not started */
-	if (!echan->edesc ||
-	    echan->edesc->pset_nr == echan->edesc->total_processed) {
+	if (!echan->edesc || !echan->edesc->pending_acks) {
 		/* Get next vdesc */
 		vdesc = vchan_next_desc(&echan->vchan);
 		if (!vdesc) {
@@ -180,6 +183,8 @@ static void edma_execute(struct edma_chan *echan)
 
 		edesc->total_processed += total_link_set;
 
+		edesc->pending_acks += total_link_set;
+
 		total_left = edesc->pset_nr - edesc->total_processed;
 
 		total_link_set = total_left > MAX_NR_LS ?
@@ -190,6 +195,8 @@ static void edma_execute(struct edma_chan *echan)
 			   where total pset_nr is strictly within MAX_NR size */
 			if (total_left > total_link_set)
 				edma_enable_interrupt(echan->slot[i]);
+			else
+				edesc->no_first_ls_ack = 1;
 
 			/* Setup link between linked set 0 to set 1 */
 			edma_link(echan->slot[i], echan->slot[i+1]);
@@ -210,6 +217,9 @@ static void edma_execute(struct edma_chan *echan)
 			}
 
 			edesc->total_processed += total_link_set;
+
+			edesc->pending_acks += total_link_set;
+
 			total_left = edesc->pset_nr - edesc->total_processed;
 
 			if (total_left)
@@ -266,6 +276,8 @@ static void edma_execute(struct edma_chan *echan)
 	}
 
 	edesc->total_processed += total_link_set;
+
+	edesc->pending_acks += total_link_set;
 
 	slot_off = total_link_set + ls_cur_off - 1;
 
@@ -498,8 +510,22 @@ static void edma_callback(unsigned ch_num, u16 ch_status, void *data)
 
 		edesc = echan->edesc;
 
+		if (edesc->pending_acks < MAX_NR_LS)
+			edesc->pending_acks = 0;
+		else
+			edesc->pending_acks -= MAX_NR_LS;
+
+		if (edesc->no_first_ls_ack) {
+			if (edesc->pending_acks < MAX_NR_LS)
+				edesc->pending_acks = 0;
+			else
+				edesc->pending_acks -= MAX_NR_LS;
+
+			edesc->no_first_ls_ack = 0;
+		}
+
 		if (edesc) {
-			if (edesc->total_processed == edesc->pset_nr) {
+			if (!edesc->pending_acks) {
 				dev_dbg(dev, "Transfer complete,"
 					" stopping channel %d\n", ch_num);
 				edma_stop(echan->ch_num);
