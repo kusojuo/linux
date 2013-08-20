@@ -48,7 +48,8 @@
 
 /* Max of 16 segments per channel to conserve PaRAM slots */
 #define MAX_NR_SG		16
-#define EDMA_MAX_SLOTS		MAX_NR_SG
+#define MAX_NR_LS		(MAX_NR_SG >> 1)
+#define EDMA_MAX_SLOTS		(MAX_NR_SG+1)
 #define EDMA_DESCRIPTORS	16
 
 struct edma_desc {
@@ -56,6 +57,12 @@ struct edma_desc {
 	struct list_head		node;
 	int				absync;
 	int				pset_nr;
+	int				total_processed;
+	int				next_setup_linkset;
+
+	int				no_first_ls_ack;
+	int				pending_acks;
+
 	struct edmacc_param		pset[0];
 };
 
@@ -101,55 +108,191 @@ static void edma_desc_free(struct virt_dma_desc *vdesc)
 	kfree(container_of(vdesc, struct edma_desc, vdesc));
 }
 
+static inline void dump_pset(struct edma_chan *echan, int slot,
+		     struct edmacc_param *pset_unused, int pset_idx)
+{
+	struct edmacc_param pset_local, *pset;
+	pset = &pset_local;
+
+	edma_read_slot(slot, pset);
+
+	dev_dbg(echan->vchan.chan.device->dev,
+		"\n pset[%d]:\n"
+		"  chnum\t%d\n"
+		"  slot\t%d\n"
+		"  opt\t%08x\n"
+		"  src\t%08x\n"
+		"  dst\t%08x\n"
+		"  abcnt\t%08x\n"
+		"  ccnt\t%08x\n"
+		"  bidx\t%08x\n"
+		"  cidx\t%08x\n"
+		"  lkrld\t%08x\n",
+		pset_idx, echan->ch_num, slot,
+		pset[0].opt,
+		pset[0].src,
+		pset[0].dst,
+		pset[0].a_b_cnt,
+		pset[0].ccnt,
+		pset[0].src_dst_bidx,
+		pset[0].src_dst_cidx,
+		pset[0].link_bcntrld);
+}
+
 /* Dispatch a queued descriptor to the controller (caller holds lock) */
 static void edma_execute(struct edma_chan *echan)
 {
-	struct virt_dma_desc *vdesc = vchan_next_desc(&echan->vchan);
+	struct virt_dma_desc *vdesc;
 	struct edma_desc *edesc;
-	int i;
+	struct device *dev = echan->vchan.chan.device->dev;
 
-	if (!vdesc) {
-		echan->edesc = NULL;
+	int i, total_left, total_link_set;
+	int ls_cur_off, ls_next_off, slot_off;
+	struct edmacc_param tmp_param;
+
+	/* If either we processed all psets or we're still not started */
+	if (!echan->edesc || !echan->edesc->pending_acks) {
+		/* Get next vdesc */
+		vdesc = vchan_next_desc(&echan->vchan);
+		if (!vdesc) {
+			echan->edesc = NULL;
+			return;
+		}
+		list_del(&vdesc->node);
+		echan->edesc = to_edma_desc(&vdesc->tx);
+	}
+
+	edesc = echan->edesc;
+
+	/* Find out how many left */
+	total_left = edesc->pset_nr - edesc->total_processed;
+	total_link_set = total_left > MAX_NR_LS ? MAX_NR_LS : total_left;
+
+	if (!total_left)
+		return;
+
+	/* First time, setup 2 cyclically linked sets, each containing half
+	   the slots allocated for this channel */
+	if (edesc->total_processed == 0) {
+		for (i = 0; i < total_link_set; i++) {
+			edma_write_slot(echan->slot[i+1], &edesc->pset[i]);
+
+			if (i != total_link_set - 1) {
+				edma_link(echan->slot[i+1], echan->slot[i+2]);
+				dump_pset(echan, echan->slot[i+1],
+					  edesc->pset, i);
+			}
+		}
+
+		edesc->total_processed += total_link_set;
+
+		edesc->pending_acks += total_link_set;
+
+		total_left = edesc->pset_nr - edesc->total_processed;
+
+		total_link_set = total_left > MAX_NR_LS ?
+				 MAX_NR_LS : total_left;
+
+		if (total_link_set) {
+			/* Don't setup interrupt for first linked set for cases
+			   where total pset_nr is strictly within MAX_NR size */
+			if (total_left > total_link_set)
+				edma_enable_interrupt(echan->slot[i]);
+			else
+				edesc->no_first_ls_ack = 1;
+
+			/* Setup link between linked set 0 to set 1 */
+			edma_link(echan->slot[i], echan->slot[i+1]);
+
+			dump_pset(echan, echan->slot[i], edesc->pset, i-1);
+
+			/* Write out linked set 1 */
+			for (; i < total_link_set + MAX_NR_LS; i++) {
+				edma_write_slot(echan->slot[i+1],
+						&edesc->pset[i]);
+
+				if (i != total_link_set + MAX_NR_LS - 1) {
+					edma_link(echan->slot[i+1],
+						  echan->slot[i+2]);
+					dump_pset(echan, echan->slot[i+1],
+						  edesc->pset, i);
+				}
+			}
+
+			edesc->total_processed += total_link_set;
+
+			edesc->pending_acks += total_link_set;
+
+			total_left = edesc->pset_nr - edesc->total_processed;
+
+			if (total_left)
+				/* Setup a link from linked set 1 to set 0 */
+				edma_link(echan->slot[i], echan->slot[1]);
+			else
+				/* Setup a link between linked set 1 to dummy */
+				edma_link(echan->slot[i], echan->ecc->dummy_slot);
+		} else {
+			/* First linked set was enough, simply link to dummy */
+			edma_link(echan->slot[i], echan->ecc->dummy_slot);
+		}
+
+		edma_enable_interrupt(echan->slot[i]);
+		dump_pset(echan, echan->slot[i], edesc->pset, i-1);
+
+		edesc->next_setup_linkset = 0;
+
+		/* Start the ball rolling... */
+		dev_dbg(dev, "first transfer starting %d\n", echan->ch_num);
+
+		edma_read_slot(echan->slot[1], &tmp_param);
+		edma_write_slot(echan->slot[0], &tmp_param);
+		edma_start(echan->ch_num);
+
 		return;
 	}
 
-	list_del(&vdesc->node);
+	/* We got called in the middle of an SG-list transaction as one of the
+	   linked sets completed  */
 
-	echan->edesc = edesc = to_edma_desc(&vdesc->tx);
-
-	/* Write descriptor PaRAM set(s) */
-	for (i = 0; i < edesc->pset_nr; i++) {
-		edma_write_slot(echan->slot[i], &edesc->pset[i]);
-		dev_dbg(echan->vchan.chan.device->dev,
-			"\n pset[%d]:\n"
-			"  chnum\t%d\n"
-			"  slot\t%d\n"
-			"  opt\t%08x\n"
-			"  src\t%08x\n"
-			"  dst\t%08x\n"
-			"  abcnt\t%08x\n"
-			"  ccnt\t%08x\n"
-			"  bidx\t%08x\n"
-			"  cidx\t%08x\n"
-			"  lkrld\t%08x\n",
-			i, echan->ch_num, echan->slot[i],
-			edesc->pset[i].opt,
-			edesc->pset[i].src,
-			edesc->pset[i].dst,
-			edesc->pset[i].a_b_cnt,
-			edesc->pset[i].ccnt,
-			edesc->pset[i].src_dst_bidx,
-			edesc->pset[i].src_dst_cidx,
-			edesc->pset[i].link_bcntrld);
-		/* Link to the previous slot if not the last set */
-		if (i != (edesc->pset_nr - 1))
-			edma_link(echan->slot[i], echan->slot[i+1]);
-		/* Final pset links to the dummy pset */
-		else
-			edma_link(echan->slot[i], echan->ecc->dummy_slot);
+	/* Setup offsets into echan_slot, +1 is as slot 0 is for chan */
+	if (edesc->next_setup_linkset == 1) {
+		edesc->next_setup_linkset = 0;
+		ls_cur_off = MAX_NR_LS + 1;
+		ls_next_off = 1;
+	} else {
+		edesc->next_setup_linkset = 1;
+		ls_cur_off = 1;
+		ls_next_off = MAX_NR_LS + 1;
 	}
 
-	edma_start(echan->ch_num);
+	for (i = 0; i < total_link_set; i++) {
+		edma_write_slot(echan->slot[i + ls_cur_off],
+				&edesc->pset[i + edesc->total_processed]);
+
+		if (i != total_link_set - 1) {
+			edma_link(echan->slot[i + ls_cur_off],
+				  echan->slot[i + ls_cur_off + 1]);
+
+			dump_pset(echan, echan->slot[i + ls_cur_off],
+				  edesc->pset, i + edesc->total_processed);
+		}
+	}
+
+	edesc->total_processed += total_link_set;
+
+	edesc->pending_acks += total_link_set;
+
+	slot_off = total_link_set + ls_cur_off - 1;
+
+	if (edesc->total_processed == edesc->pset_nr)
+		edma_link(echan->slot[slot_off], echan->ecc->dummy_slot);
+	else
+		edma_link(echan->slot[slot_off], echan->slot[ls_next_off]);
+
+	edma_enable_interrupt(echan->slot[slot_off]);
+
+	dump_pset(echan, echan->slot[slot_off],
+		  edesc->pset, edesc->total_processed-1);
 }
 
 static int edma_terminate_all(struct edma_chan *echan)
@@ -222,9 +365,12 @@ static struct dma_async_tx_descriptor *edma_prep_slave_sg(
 	enum dma_slave_buswidth dev_width;
 	u32 burst;
 	struct scatterlist *sg;
-	int i;
 	int acnt, bcnt, ccnt, src, dst, cidx;
 	int src_bidx, dst_bidx, src_cidx, dst_cidx;
+	int i, num_slots_needed;
+
+	if (MAX_NR_SG & 1)
+		dev_err(dev, "%s: MAX_NR_SG must be even\n", __func__);
 
 	if (unlikely(!echan || !sgl || !sg_len))
 		return NULL;
@@ -247,12 +393,6 @@ static struct dma_async_tx_descriptor *edma_prep_slave_sg(
 		return NULL;
 	}
 
-	if (sg_len > MAX_NR_SG) {
-		dev_err(dev, "Exceeded max SG segments %d > %d\n",
-			sg_len, MAX_NR_SG);
-		return NULL;
-	}
-
 	edesc = kzalloc(sizeof(*edesc) + sg_len *
 		sizeof(edesc->pset[0]), GFP_ATOMIC);
 	if (!edesc) {
@@ -262,8 +402,14 @@ static struct dma_async_tx_descriptor *edma_prep_slave_sg(
 
 	edesc->pset_nr = sg_len;
 
-	for_each_sg(sgl, sg, sg_len, i) {
-		/* Allocate a PaRAM slot, if needed */
+	/* Allocate a PaRAM slot, if needed */
+
+	num_slots_needed = sg_len > MAX_NR_SG ? MAX_NR_SG : sg_len;
+
+	/* Allocate one extra to account for the channel itself */
+	num_slots_needed++;
+
+	for (i = 0; i < num_slots_needed; i++) {
 		if (echan->slot[i] < 0) {
 			echan->slot[i] =
 				edma_alloc_slot(EDMA_CTLR(echan->ch_num),
@@ -273,6 +419,10 @@ static struct dma_async_tx_descriptor *edma_prep_slave_sg(
 				return NULL;
 			}
 		}
+	}
+
+	/* Configure PaRAM sets for each SG */
+	for_each_sg(sgl, sg, sg_len, i) {
 
 		acnt = dev_width;
 
@@ -330,6 +480,7 @@ static struct dma_async_tx_descriptor *edma_prep_slave_sg(
 		/* Configure A or AB synchronized transfers */
 		if (edesc->absync)
 			edesc->pset[i].opt |= SYNCDIM;
+
 		/* If this is the last set, enable completion interrupt flag */
 		if (i == sg_len - 1)
 			edesc->pset[i].opt |= TCINTEN;
@@ -356,19 +507,39 @@ static void edma_callback(unsigned ch_num, u16 ch_status, void *data)
 	struct edma_desc *edesc;
 	unsigned long flags;
 
-	/* Stop the channel */
-	edma_stop(echan->ch_num);
-
 	switch (ch_status) {
 	case DMA_COMPLETE:
-		dev_dbg(dev, "transfer complete on channel %d\n", ch_num);
-
 		spin_lock_irqsave(&echan->vchan.lock, flags);
 
 		edesc = echan->edesc;
+
+		if (edesc->pending_acks < MAX_NR_LS)
+			edesc->pending_acks = 0;
+		else
+			edesc->pending_acks -= MAX_NR_LS;
+
+		if (edesc->no_first_ls_ack) {
+			if (edesc->pending_acks < MAX_NR_LS)
+				edesc->pending_acks = 0;
+			else
+				edesc->pending_acks -= MAX_NR_LS;
+
+			edesc->no_first_ls_ack = 0;
+		}
+
 		if (edesc) {
+			if (!edesc->pending_acks) {
+				dev_dbg(dev, "Transfer complete,"
+					" stopping channel %d\n", ch_num);
+				edma_stop(echan->ch_num);
+				vchan_cookie_complete(&edesc->vdesc);
+			} else {
+				dev_dbg(dev, "Intermediate transfer "
+					"complete, setup next linked set on "
+					"%d\n ", ch_num);
+			}
+
 			edma_execute(echan);
-			vchan_cookie_complete(&edesc->vdesc);
 		}
 
 		spin_unlock_irqrestore(&echan->vchan.lock, flags);

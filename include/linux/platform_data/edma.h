@@ -136,6 +136,7 @@ void edma_set_dest_index(unsigned slot, s16 dest_bidx, s16 dest_cidx);
 void edma_set_transfer_params(unsigned slot, u16 acnt, u16 bcnt, u16 ccnt,
 		u16 bcnt_rld, enum sync_dimension sync_mode);
 void edma_link(unsigned from, unsigned to);
+void edma_enable_interrupt(unsigned slot);
 void edma_unlink(unsigned from);
 
 /* calls that operate on an entire parameter RAM slot */
