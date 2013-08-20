@@ -50,6 +50,21 @@
 static void __iomem *am33xx_emif_base;
 static struct powerdomain *cefuse_pwrdm, *gfx_pwrdm, *per_pwrdm, *mpu_pwrdm;
 static struct clockdomain *gfx_l4ls_clkdm;
+static int am33xx_ping_wkup_m3(void);
+static int am33xx_ping_wkup_m3_noirq(void);
+
+struct forced_standby_module am33xx_mod[] = {
+	{.oh_name = "usb_otg_hs"},
+	{.oh_name = "tptc0"},
+	{.oh_name = "tptc1"},
+	{.oh_name = "tptc2"},
+	{.oh_name = "cpgmac0"},
+};
+
+static void (*am33xx_do_wfi_sram)(struct am33xx_suspend_params *);
+static struct am33xx_suspend_params susp_params;
+
+#ifdef CONFIG_SUSPEND
 
 struct wakeup_src wakeups[] = {
 	{.irq_nr = 35,	.src = "USB0_PHY"},
@@ -67,30 +82,55 @@ struct wakeup_src wakeups[] = {
 	{.irq_nr = 51,	.src = "ADC_TSC"},
 };
 
-struct forced_standby_module am33xx_mod[] = {
-	{.oh_name = "usb_otg_hs"},
-	{.oh_name = "tptc0"},
-	{.oh_name = "tptc1"},
-	{.oh_name = "tptc2"},
-	{.oh_name = "cpgmac0"},
-};
-
 static struct am33xx_pm_context *am33xx_pm;
-
 static DECLARE_COMPLETION(am33xx_pm_sync);
 
-static void (*am33xx_do_wfi_sram)(struct am33xx_suspend_params *);
+#endif
 
-static struct am33xx_suspend_params susp_params;
-
-#ifdef CONFIG_SUSPEND
-
-static int am33xx_do_sram_idle(long unsigned int unused)
+static int am33xx_do_sram_idle(long unsigned int arg)
 {
-	am33xx_do_wfi_sram(&susp_params);
+	am33xx_do_wfi_sram((struct am33xx_suspend_params *) arg);
 	return 0;
 }
 
+int am33xx_do_sram_cpuidle(u32 wfi_flags, u32 m3_flags)
+{
+	struct am33xx_suspend_params params;
+	int ret;
+
+	/* Start with the default flags */
+	memcpy(&params, &susp_params, sizeof(params));
+
+	/* Clear bits configurable through this call */
+	params.wfi_flags &= ~(WFI_SELF_REFRESH | WFI_WAKE_M3 | WFI_SAVE_EMIF);
+
+	/* Don't enter these states if the M3 isn't available */
+	if (am33xx_pm->state != M3_STATE_INITED)
+		wfi_flags &= ~(WFI_WAKE_M3 | WFI_SAVE_MPU);
+
+	/* Set bits that have been passed */
+	params.wfi_flags |= wfi_flags;
+
+	if (wfi_flags & WFI_WAKE_M3) {
+		am33xx_pm->ipc.sleep_mode = IPC_CMD_IDLE;
+		am33xx_pm->ipc.param1 = DS_IPC_DEFAULT;
+		am33xx_pm->ipc.param2 = m3_flags;
+		am33xx_pm_ipc_cmd(&am33xx_pm->ipc);
+		ret = am33xx_ping_wkup_m3_noirq();
+		if (ret < 0)
+			return ret;
+	}
+
+	if (wfi_flags & WFI_SAVE_MPU)
+		ret = cpu_suspend((long unsigned int) &params,
+							am33xx_do_sram_idle);
+	else
+		am33xx_do_wfi_sram(&params);
+
+	return 0;
+}
+
+#ifdef CONFIG_SUSPEND
 static int am33xx_pm_suspend(void)
 {
 	int i, j, ret = 0;
@@ -118,7 +158,8 @@ static int am33xx_pm_suspend(void)
 
 	/* Try to put GFX to sleep */
 	omap_set_pwrdm_state(gfx_pwrdm, PWRDM_POWER_OFF);
-	ret = cpu_suspend(0, am33xx_do_sram_idle);
+	ret = cpu_suspend((long unsigned int) &susp_params,
+							am33xx_do_sram_idle);
 
 	status = pwrdm_read_prev_pwrst(gfx_pwrdm);
 	if (status != PWRDM_POWER_OFF)
@@ -205,6 +246,11 @@ static int am33xx_ping_wkup_m3(void)
 	ret = omap_mbox_msg_send(am33xx_pm->mbox, 0xABCDABCD);
 
 	return ret;
+}
+
+static int am33xx_ping_wkup_m3_noirq(void)
+{
+	return omap_mbox_msg_send_noirq(am33xx_pm->mbox, 0xABCDABCD);
 }
 
 static void am33xx_m3_state_machine_reset(void)
@@ -479,6 +525,8 @@ int __init am33xx_pm_init(void)
 				NULL, GFP_KERNEL, am33xx_pm,
 				am33xx_pm_firmware_cb);
 #endif /* CONFIG_SUSPEND */
+
+	am33xx_idle_init();
 
 err:
 	return ret;

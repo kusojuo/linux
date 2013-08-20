@@ -54,10 +54,12 @@ struct forced_standby_module {
 int wkup_m3_copy_code(const u8 *data, size_t size);
 int wkup_m3_prepare(void);
 void wkup_m3_register_txev_handler(void (*txev_handler)(void));
+int am33xx_do_sram_cpuidle(u32, u32);
 
 #endif
 
 #define	IPC_CMD_DS0			0x3
+#define	IPC_CMD_IDLE			0xd
 #define IPC_CMD_RESET                   0xe
 #define DS_IPC_DEFAULT			0xffffffff
 #define M3_VERSION_UNKNOWN		0x0000ffff
@@ -81,5 +83,48 @@ void wkup_m3_register_txev_handler(void (*txev_handler)(void));
 #define WFI_SAVE_EMIF		(1 << 3)
 #define WFI_WAKE_M3		(1 << 4)
 #define WFI_SAVE_MPU		(1 << 5)
+
+#define MEM_BANK_RET_ST_OFF	0x0
+#define MEM_BANK_RET_ST_RET	0x1
+
+#define MEM_BANK_ON_ST_OFF	0x0
+#define MEM_BANK_ON_ST_RET	0x1
+#define MEM_BANK_ON_ST_ON	0x3
+
+#define MPU_WAKE		0x800
+
+#define M3_PARAM1_MOSC_STATE_SHIFT	0
+#define M3_PARAM1_MOSC_STATE_MASK	(0x1 << 0)
+#define M3_PARAM1_OSC_CYCLES_SHIFT	1
+#define M3_PARAM1_OSC_CYCLES_MASK	(0xffff << 1)
+#define M3_PARAM1_MPU_VOLT_SHIFT	17
+#define M3_PARAM1_MPU_VOLT_MASK		(0x7fff << 17)
+
+#define M3_PARAM2_MPU_STATE_SHIFT	0
+#define M3_PARAM2_MPU_STATE_MASK	(0x3 << 0)
+#define M3_PARAM2_MPU_RAM_RET_SHIFT	2
+#define M3_PARAM2_MPU_RAM_RET_MASK	(0x1 << 2)
+#define M3_PARAM2_MPU_L1_RET_SHIFT	3
+#define M3_PARAM2_MPU_L1_RET_MASK	(0x1 << 3)
+#define M3_PARAM2_MPU_L2_RET_SHIFT	4
+#define M3_PARAM2_MPU_L2_RET_MASK	(0x1 << 4)
+#define M3_PARAM2_MPU_RAM_ON_SHIFT	5
+#define M3_PARAM2_MPU_RAM_ON_MASK	(0x3 << 5)
+#define M3_PARAM2_PER_STATE_SHIFT	7
+#define M3_PARAM2_PER_STATE_MASK	(0x3 << 7)
+#define M3_PARAM2_PER_ICSS_RET_SHIFT	9
+#define M3_PARAM2_PER_ICSS_RET_MASK	(0x1 << 9)
+#define M3_PARAM2_PER_MEM_RET_SHIFT	10
+#define M3_PARAM2_PER_MEM_RET_MASK	(0x1 << 10)
+#define M3_PARAM2_PER_OCMC_RET_SHIFT	11
+#define M3_PARAM2_PER_OCMC_RET_MASK	(0x1 << 11)
+#define M3_PARAM2_PER_ICSS_ON_SHIFT	12
+#define M3_PARAM2_PER_ICSS_ON_MASK	(0x3 << 12)
+#define M3_PARAM2_PER_MEM_ON_SHIFT	14
+#define M3_PARAM2_PER_MEM_ON_MASK	(0x3 << 14)
+#define M3_PARAM2_PER_OCMC_SHIFT	16
+#define M3_PARAM2_PER_OCMC_MASK		(0x3 << 16)
+#define M3_PARAM2_WAKE_SOURCES_SHIFT	18
+#define M3_PARAM2_WAKE_SOURCES_MASK	(0x1fff << 18)
 
 #endif
