@@ -58,7 +58,7 @@ int am33xx_do_sram_cpuidle(u32, u32);
 
 #endif
 
-#define	IPC_CMD_DS0			0x3
+#define	IPC_CMD_DS0			0x4
 #define	IPC_CMD_IDLE			0xd
 #define IPC_CMD_RESET                   0xe
 #define DS_IPC_DEFAULT			0xffffffff
