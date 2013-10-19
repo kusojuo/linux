@@ -47,7 +47,7 @@
 static void __iomem *am33xx_emif_base;
 static struct powerdomain *cefuse_pwrdm, *gfx_pwrdm, *per_pwrdm, *mpu_pwrdm;
 static struct clockdomain *gfx_l4ls_clkdm;
-static struct clockdomain *l3s_clkdm, *l4fw_clkdm, *clk_24mhz_clkdm;
+static struct clockdomain *l3s_clkdm, *l4fw_clkdm;
 
 static struct am33xx_pm_context *am33xx_pm;
 
@@ -74,7 +74,6 @@ static int am33xx_pm_suspend(unsigned int state)
 	if (state == PM_SUSPEND_STANDBY) {
 		clkdm_wakeup(l3s_clkdm);
 		clkdm_wakeup(l4fw_clkdm);
-		clkdm_wakeup(clk_24mhz_clkdm);
 	}
 
 	/* Try to put GFX to sleep */
@@ -326,10 +325,9 @@ int __init am33xx_pm_init(void)
 	gfx_l4ls_clkdm = clkdm_lookup("gfx_l4ls_gfx_clkdm");
 	l3s_clkdm = clkdm_lookup("l3s_clkdm");
 	l4fw_clkdm = clkdm_lookup("l4fw_clkdm");
-	clk_24mhz_clkdm = clkdm_lookup("clk_24mhz_clkdm");
 
 	if ((!gfx_pwrdm) || (!per_pwrdm) || (!mpu_pwrdm) || (!gfx_l4ls_clkdm) ||
-	    (!l3s_clkdm) || (!l4fw_clkdm) || (!clk_24mhz_clkdm)) {
+	    (!l3s_clkdm) || (!l4fw_clkdm)) {
 		ret = -ENODEV;
 		goto err;
 	}

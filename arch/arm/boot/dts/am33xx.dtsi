@@ -426,7 +426,7 @@
 			interrupts = <75
 				      76>;
 			ti,hwmods = "rtc";
-			clocks = <&clk_32768_ck>;
+			clocks = <&clkdiv32k_ick>;
 			clock-names = "fck";
 		};
 
@@ -864,5 +864,12 @@
 		#size-cells = <1>;
 		ranges;
 		/include/ "am33xx-clocks.dtsi"
+	};
+
+	clockdomains {
+		clk_24mhz_clkdm: clk_24mhz_clkdm {
+			compatible = "ti,clockdomain";
+			clocks = <&clkdiv32k_ick>;
+		};
 	};
 };
