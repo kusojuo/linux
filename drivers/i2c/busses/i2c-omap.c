@@ -275,7 +275,6 @@ static inline u16 omap_i2c_read_reg(struct omap_i2c_dev *i2c_dev, int reg)
 
 static void __omap_i2c_init(struct omap_i2c_dev *dev)
 {
-
 	omap_i2c_write_reg(dev, OMAP_I2C_CON_REG, 0);
 
 	/* Setup clock prescaler to obtain approx 12MHz I2C module clock: */
@@ -1292,11 +1291,24 @@ static int omap_i2c_runtime_resume(struct device *dev)
 
 	return 0;
 }
+
+static int omap_i2c_suspend(struct device *dev)
+{
+	pm_runtime_put_sync(dev);
+	return 0;
+}
+
+static int omap_i2c_resume(struct device *dev)
+{
+	pm_runtime_get_sync(dev);
+	return 0;
+}
 #endif /* CONFIG_PM_RUNTIME */
 
 static struct dev_pm_ops omap_i2c_pm_ops = {
 	SET_RUNTIME_PM_OPS(omap_i2c_runtime_suspend,
 			   omap_i2c_runtime_resume, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(omap_i2c_suspend, omap_i2c_resume)
 };
 #define OMAP_I2C_PM_OPS (&omap_i2c_pm_ops)
 #else
