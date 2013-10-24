@@ -22,7 +22,6 @@
 
 struct am33xx_pm_context {
 	struct am33xx_ipc_regs	ipc;
-	struct firmware		*firmware;
 	struct omap_mbox	*mbox;
 	u8			state;
 	u32			ver;

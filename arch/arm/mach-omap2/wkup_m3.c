@@ -57,6 +57,7 @@
 
 struct wkup_m3_context {
 	struct device	*dev;
+	const struct firmware *firmware;
 	void __iomem	*code;
 	void __iomem	*ipc;
 	u8		is_valid;
@@ -270,6 +271,33 @@ static int wkup_m3_copy_code(const u8 *data, size_t size)
 	return 0;
 }
 
+void wkup_m3_reinitialize(void)
+{
+	struct platform_device *pdev = to_platform_device(wkup_m3->dev);
+	int ret;
+
+	if (!wkup_m3->is_valid)
+		goto err;
+
+
+	ret = omap_device_assert_hardreset(pdev, "wkup_m3");
+	if (ret < 0)
+		goto err;
+
+	wkup_m3_copy_code(wkup_m3->firmware->data, wkup_m3->firmware->size);
+
+	wkup_m3_fw_version_clear();
+
+	ret = omap_device_deassert_hardreset(pdev, "wkup_m3");
+	if (ret < 0)
+		goto err;
+
+	return;
+
+err:
+	pr_err("Could not restore M3 context\n");
+}
+
 static void wkup_m3_firmware_cb(const struct firmware *fw, void *context)
 {
 	int ret = 0;
@@ -287,7 +315,7 @@ static void wkup_m3_firmware_cb(const struct firmware *fw, void *context)
 	} else {
 		if (wkup_m3->ops && wkup_m3->ops->firmware_loaded)
 			wkup_m3->ops->firmware_loaded();
-
+		wkup_m3->firmware = fw;
 		wkup_m3->is_valid = true;
 	}
 

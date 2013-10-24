@@ -48,6 +48,7 @@ struct am33xx_ipc_regs {
 };
 
 int wkup_m3_prepare(void);
+void wkup_m3_reinitialize(void);
 void wkup_m3_set_ops(struct wkup_m3_ops *ops);
 int wkup_m3_ping(void);
 struct wkup_m3_wakeup_src wkup_m3_wake_src(void);

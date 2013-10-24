@@ -464,3 +464,4 @@ int omap2_clksel_set_parent(struct clk_hw *hw, u8 field_val)
 	_write_clksel_reg(clk, field_val);
 	return 0;
 }
+

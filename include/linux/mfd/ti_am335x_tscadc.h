@@ -152,6 +152,8 @@ struct ti_tscadc_dev {
 
 	/* adc device */
 	struct adc_device *adc;
+
+	unsigned int clkdiv;
 };
 
 static inline struct ti_tscadc_dev *ti_tscadc_dev_get(struct platform_device *p)

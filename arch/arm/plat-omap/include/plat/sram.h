@@ -2,7 +2,6 @@ int omap_sram_init(void);
 
 void omap_map_sram(unsigned long start, unsigned long size,
 			unsigned long skip, int cached);
-void omap_sram_reset(void);
 
 extern void *omap_sram_push_address(unsigned long size);
 
@@ -14,3 +13,11 @@ extern void *omap_sram_push_address(unsigned long size);
 		_res = fncpy(_sram_address, &(funcp), size);	\
 	_res;							\
 })
+
+#ifdef CONFIG_PM
+extern void omap_sram_save_context(void);
+extern void omap_sram_restore_context(void);
+#else
+static inline void omap_sram_save_context(void) {}
+static inline void omap_sram_restore_context(void) {}
+#endif

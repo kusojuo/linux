@@ -285,6 +285,7 @@ void omap_sram_idle(void)
 		if (core_next_state == PWRDM_POWER_OFF) {
 			omap3_core_save_context();
 			omap3_cm_save_context();
+			omap_sram_save_context();
 		}
 	}
 
@@ -327,7 +328,7 @@ void omap_sram_idle(void)
 		if (core_prev_state == PWRDM_POWER_OFF) {
 			omap3_core_restore_context();
 			omap3_cm_restore_context();
-			omap3_sram_restore_context();
+			omap_sram_restore_context();
 			omap2_sms_restore_context();
 		}
 		if (core_next_state == PWRDM_POWER_OFF)
@@ -629,7 +630,7 @@ static int __init pwrdms_setup(struct powerdomain *pwrdm, void *unused)
  * - omap3_do_wfi for erratum i581 WA,
  * - save_secure_ram_context for security extensions.
  */
-void omap_push_sram_idle(void)
+static void omap3_push_sram_idle(void)
 {
 	omap3_do_wfi_sram = omap_sram_push(omap3_do_wfi, omap3_do_wfi_sz);
 
@@ -657,6 +658,8 @@ int __init omap3_pm_init(void)
 	struct power_state *pwrst, *tmp;
 	struct clockdomain *neon_clkdm, *mpu_clkdm, *per_clkdm, *wkup_clkdm;
 	int ret;
+
+	omap3_push_sram_idle();
 
 	if (!omap3_has_io_chain_ctrl())
 		pr_warning("PM: no software I/O chain control; some wakeups may be lost\n");
