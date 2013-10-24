@@ -1509,6 +1509,7 @@ static struct omap_hwmod am33xx_wd_timer1_hwmod = {
 	},
 };
 
+#if 0
 /*
  * 'usb_otg' class
  * high-speed on-the-go universal serial bus (usb_otg) controller
@@ -1540,6 +1541,7 @@ static struct omap_hwmod am33xx_usbss_hwmod = {
 		},
 	},
 };
+#endif
 
 static struct omap_hwmod_class_sysconfig am43xx_synctimer_sysc = {
 	.rev_offs	= 0x0,
@@ -2486,6 +2488,7 @@ static struct omap_hwmod_ocp_if am33xx_l4_wkup__wd_timer1 = {
 
 /* usbss */
 /* l3 s -> USBSS interface */
+#if 0
 static struct omap_hwmod_ocp_if am33xx_l3_s__usbss = {
 	.master		= &am33xx_l3_s_hwmod,
 	.slave		= &am33xx_usbss_hwmod,
@@ -2493,6 +2496,7 @@ static struct omap_hwmod_ocp_if am33xx_l3_s__usbss = {
 	.user		= OCP_USER_MPU,
 	.flags		= OCPIF_SWSUP_IDLE,
 };
+#endif
 
 /* l3 main -> ocmc */
 static struct omap_hwmod_ocp_if am33xx_l3_main__ocmc = {
@@ -2957,7 +2961,7 @@ static struct omap_hwmod_ocp_if *am33xx_hwmod_ocp_ifs[] __initdata = {
 	&am33xx_l3_main__debugss,
 	&am33xx_l4_hs__pruss,
 	&am33xx_l3_main__lcdc,
-	&am33xx_l3_s__usbss,
+	//&am33xx_l3_s__usbss,
 	NULL,
 };
 
