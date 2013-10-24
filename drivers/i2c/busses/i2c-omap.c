@@ -178,8 +178,6 @@ enum {
 #define I2C_OMAP_ERRATA_I207		(1 << 0)
 #define I2C_OMAP_ERRATA_I462		(1 << 1)
 
-#define OMAP_I2C_IP_V2_INTERRUPTS_MASK	0x6FFF
-
 struct omap_i2c_dev {
 	spinlock_t		lock;		/* IRQ synchronization */
 	struct device		*dev;
@@ -193,7 +191,6 @@ struct omap_i2c_dev {
 						    long latency);
 	u32			speed;		/* Speed of bus in kHz */
 	u32			flags;
-	u16			scheme;
 	u16			cmd_err;
 	u8			*buf;
 	u8			*regs;
@@ -1080,7 +1077,7 @@ omap_i2c_probe(struct platform_device *pdev)
 	int irq;
 	int r;
 	u32 rev;
-	u16 minor, major;
+	u16 minor, major, scheme;
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0) {
@@ -1141,8 +1138,8 @@ omap_i2c_probe(struct platform_device *pdev)
 	 */
 	rev = __raw_readw(dev->base + 0x04);
 
-	dev->scheme = OMAP_I2C_SCHEME(rev);
-	switch (dev->scheme) {
+	scheme = OMAP_I2C_SCHEME(rev);
+	switch (scheme) {
 	case OMAP_I2C_SCHEME_0:
 		dev->regs = (u8 *)reg_map_ip_v1;
 		dev->rev = omap_i2c_read_reg(dev, OMAP_I2C_REV_REG);
@@ -1269,11 +1266,7 @@ static int omap_i2c_runtime_suspend(struct device *dev)
 
 	_dev->iestate = omap_i2c_read_reg(_dev, OMAP_I2C_IE_REG);
 
-	if (_dev->scheme == OMAP_I2C_SCHEME_0)
-		omap_i2c_write_reg(_dev, OMAP_I2C_IE_REG, 0);
-	else
-		omap_i2c_write_reg(_dev, OMAP_I2C_IP_V2_IRQENABLE_CLR,
-				   OMAP_I2C_IP_V2_INTERRUPTS_MASK);
+	omap_i2c_write_reg(_dev, OMAP_I2C_IE_REG, 0);
 
 	if (_dev->rev < OMAP_I2C_OMAP1_REV_2) {
 		omap_i2c_read_reg(_dev, OMAP_I2C_IV_REG); /* Read clears */
