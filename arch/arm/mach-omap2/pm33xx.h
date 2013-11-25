@@ -41,11 +41,13 @@ struct am33xx_suspend_params {
 	void __iomem *dram_sync;
 };
 
+int am33xx_do_sram_cpuidle(u32, u32);
 
 #endif
 
 #define	IPC_CMD_DS0			0x4
 #define	IPC_CMD_STANDBY			0xc
+#define	IPC_CMD_IDLE			0xd
 #define IPC_CMD_RESET			0xe
 #define DS_IPC_DEFAULT			0xffffffff
 #define M3_VERSION_UNKNOWN		0x0000ffff
@@ -81,5 +83,17 @@ struct am33xx_suspend_params {
 #define VTT_STAT_MASK		(0x1 << 3)
 #define VTT_GPIO_PIN_SHIFT	(0x4)
 #define VTT_GPIO_PIN_MASK	(0x2f << 4)
+
+#define MPU_WAKE		0x800
+
+#define MEM_BANK_RET_ST_OFF		0x0
+#define MEM_BANK_RET_ST_RET		0x1
+
+#define M3_PARAM2_MPU_STATE_SHIFT	0
+#define M3_PARAM2_MPU_RAM_RET_SHIFT	2
+#define M3_PARAM2_MPU_L1_RET_SHIFT	3
+#define M3_PARAM2_MPU_L2_RET_SHIFT	4
+#define M3_PARAM2_PER_STATE_SHIFT	7
+#define M3_PARAM2_WAKE_SOURCES_SHIFT	18
 
 #endif

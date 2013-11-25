@@ -49,9 +49,6 @@ static struct powerdomain *cefuse_pwrdm, *gfx_pwrdm, *per_pwrdm, *mpu_pwrdm;
 static struct clockdomain *gfx_l4ls_clkdm;
 static struct clockdomain *l3s_clkdm, *l4fw_clkdm, *clk_24mhz_clkdm;
 
-static struct am33xx_pm_context *am33xx_pm;
-
-static DECLARE_COMPLETION(am33xx_pm_sync);
 
 static void (*am33xx_do_wfi_sram)(struct am33xx_suspend_params *);
 
@@ -59,12 +56,52 @@ static struct am33xx_suspend_params susp_params;
 
 #ifdef CONFIG_SUSPEND
 
+static struct am33xx_pm_context *am33xx_pm;
+static DECLARE_COMPLETION(am33xx_pm_sync);
+
+#endif
+
 static int am33xx_do_sram_idle(long unsigned int arg)
 {
 	am33xx_do_wfi_sram((struct am33xx_suspend_params *) arg);
 	return 0;
 }
 
+int am33xx_do_sram_cpuidle(u32 wfi_flags, u32 m3_flags)
+{
+	struct am33xx_suspend_params params;
+	int ret;
+
+	/* Start with the default flags */
+	memcpy(&params, &susp_params, sizeof(params));
+
+	/* Clear bits configurable through this call */
+	params.wfi_flags &= ~(WFI_SELF_REFRESH | WFI_WAKE_M3 | WFI_SAVE_EMIF |
+							WFI_DISABLE_EMIF);
+
+	/* Don't enter these states if the M3 isn't available */
+	if (am33xx_pm->state != M3_STATE_INITED)
+		wfi_flags &= ~WFI_WAKE_M3;
+
+	/* Set bits that have been passed */
+	params.wfi_flags |= wfi_flags;
+
+	if (wfi_flags & WFI_WAKE_M3) {
+		am33xx_pm->ipc.reg1 = IPC_CMD_IDLE;
+		am33xx_pm->ipc.reg2 = DS_IPC_DEFAULT;
+		am33xx_pm->ipc.reg3 = m3_flags;
+		wkup_m3_pm_set_cmd(&am33xx_pm->ipc);
+		ret = wkup_m3_ping_noirq();
+		if (ret < 0)
+			return ret;
+	}
+
+	am33xx_do_wfi_sram(&params);
+
+	return 0;
+}
+
+#ifdef CONFIG_SUSPEND
 static int am33xx_pm_suspend(unsigned int state)
 {
 	int i, ret = 0;
@@ -281,6 +318,8 @@ static void am33xx_m3_fw_ready_cb(void)
 		pr_info("PM: CM3 Firmware Version = 0x%x\n",
 					am33xx_pm->ver);
 	}
+
+	am33xx_idle_init(susp_params.wfi_flags & WFI_MEM_TYPE_DDR3);
 
 #ifdef CONFIG_SUSPEND
 	suspend_set_ops(&am33xx_pm_ops);
