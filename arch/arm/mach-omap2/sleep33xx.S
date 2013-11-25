@@ -28,7 +28,6 @@
 
 #define EMIF_POWER_MGMT_SELF_REFRESH_MODE 				0x0200
 #define EMIF_POWER_MGMT_SELF_REFRESH_MODE_MASK  		0x0700
-#define EMIF_POWER_MGMT_DELAY_PERIOD					0x1000
 
 #define AM33XX_CM_CLKCTRL_MODULEMODE_DISABLE			0x0003
 #define AM33XX_CM_CLKCTRL_MODULEMODE_ENABLE				0x0002
@@ -121,11 +120,6 @@ ENTRY(am33xx_do_wfi)
 	ldr	r2, [r1, #0]
 
 
-	mov	r1, #EMIF_POWER_MGMT_DELAY_PERIOD	@ Wait for system
-wait_self_refresh:					@ to enter SR
-	subs	r1, r1, #1
-	bne	wait_self_refresh
-
 	/* Disable EMIF */
 	ldr	r1, virt_emif_clkctrl
 	ldr	r2, [r1]
@@ -217,12 +211,6 @@ wait_emif_enable:
 	mcr	p15, 0, r0, c1, c0, 0
 	isb
 
-	/* EMIF needs some time before read/write possible */
-	mov r0, #EMIF_POWER_MGMT_DELAY_PERIOD
-wait_abt:
-	subs   r0, r0, #1
-	bne wait_abt
-
 	/* Let the suspend code know about the abort */
 	mov	r0, #1
 	ldmfd	sp!, {r4 - r11, pc}	@ restore regs and return
@@ -285,12 +273,6 @@ wait_emif_enable1:
 	 */
 	ldr	r1, emif_zqcfg_val
 	str	r1, [r0, #EMIF_SDRAM_OUTPUT_IMPEDANCE_CALIBRATION_CONFIG]
-
-	/* EMIF needs some time before read/write possible */
-	mov	r1, #EMIF_POWER_MGMT_DELAY_PERIOD
-wait_resume:
-	subs	r1, r1, #1
-	bne	wait_resume
 
 	/* All done.. so restore back enter into suspend configuration */
 	ldr	r1, emif_pmcr_val
